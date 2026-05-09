@@ -2,7 +2,7 @@
 $host = '127.0.0.1';
 $dbname = 'quiz_app';
 $user = 'root';
-$password = 'GNG123';
+$password = 'root';
 
 try {
     $pdo = new PDO("mysql:host=$host;port=8889;dbname=$dbname;charset=utf8", $user, $password);
