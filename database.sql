@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Hôte : localhost:8889
--- Généré le : jeu. 07 mai 2026 à 13:01
+-- Généré le : lun. 11 mai 2026 à 13:51
 -- Version du serveur : 8.0.40
 -- Version de PHP : 8.3.14
 
@@ -29,7 +29,7 @@ SET time_zone = "+00:00";
 
 CREATE TABLE `groupes` (
   `id` int NOT NULL,
-  `nom` varchar(50) COLLATE utf8mb4_general_ci NOT NULL
+  `nom` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -40,8 +40,11 @@ CREATE TABLE `groupes` (
 
 CREATE TABLE `participants` (
   `id` int NOT NULL,
-  `nom` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,
-  `groupe_id` int DEFAULT NULL
+  `nom` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `groupe_id` int DEFAULT NULL,
+  `session_id` int DEFAULT NULL,
+  `session_code` varchar(6) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -52,11 +55,11 @@ CREATE TABLE `participants` (
 
 CREATE TABLE `questions` (
   `id` int NOT NULL,
-  `texte` text COLLATE utf8mb4_general_ci NOT NULL,
-  `choix_1` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `choix_2` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `choix_3` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `choix_4` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `texte` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `choix_1` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `choix_2` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `choix_3` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `choix_4` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `bonne_reponse` tinyint NOT NULL,
   `est_question_or` tinyint(1) DEFAULT '0',
   `duree` int DEFAULT '10'
@@ -92,12 +95,26 @@ CREATE TABLE `scores` (
 -- --------------------------------------------------------
 
 --
+-- Structure de la table `sessions`
+--
+
+CREATE TABLE `sessions` (
+  `id` int NOT NULL,
+  `code` varchar(6) COLLATE utf8mb4_general_ci NOT NULL,
+  `statut` enum('waiting','active','done') COLLATE utf8mb4_general_ci DEFAULT 'waiting',
+  `round_actuel` int DEFAULT '0',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Structure de la table `sessions_quiz`
 --
 
 CREATE TABLE `sessions_quiz` (
   `id` int NOT NULL,
-  `statut` enum('en_attente','en_cours','termine') COLLATE utf8mb4_general_ci DEFAULT 'en_attente',
+  `statut` enum('en_attente','en_cours','termine') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT 'en_attente',
   `question_actuelle` int DEFAULT '0',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -110,10 +127,10 @@ CREATE TABLE `sessions_quiz` (
 
 CREATE TABLE `utilisateurs` (
   `id` int NOT NULL,
-  `nom` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,
-  `role` enum('admin','jury','moderateur') COLLATE utf8mb4_general_ci NOT NULL,
-  `login` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,
-  `mot_de_passe` varchar(255) COLLATE utf8mb4_general_ci NOT NULL
+  `nom` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `role` enum('admin','jury','moderateur') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `login` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `mot_de_passe` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -155,6 +172,13 @@ ALTER TABLE `scores`
   ADD UNIQUE KEY `participant_id` (`participant_id`);
 
 --
+-- Index pour la table `sessions`
+--
+ALTER TABLE `sessions`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `code` (`code`);
+
+--
 -- Index pour la table `sessions_quiz`
 --
 ALTER TABLE `sessions_quiz`
@@ -181,13 +205,13 @@ ALTER TABLE `groupes`
 -- AUTO_INCREMENT pour la table `participants`
 --
 ALTER TABLE `participants`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT pour la table `questions`
 --
 ALTER TABLE `questions`
-  MODIFY `id` int NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT pour la table `reponses`
@@ -200,6 +224,12 @@ ALTER TABLE `reponses`
 --
 ALTER TABLE `scores`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT pour la table `sessions`
+--
+ALTER TABLE `sessions`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT pour la table `sessions_quiz`

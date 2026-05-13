@@ -52,24 +52,57 @@ function getQuestionById($pdo, $id) {
  * --- TIRAGE AU SORT ---
  */
 
-function dispatchParticipants($pdo) {
-    $stmt = $pdo->query("SELECT id FROM participants LIMIT 75");
+ function dispatchParticipants($pdo) {
+
+    // Récupérer la session active
+    $session = $pdo->query("
+        SELECT id FROM sessions 
+        WHERE statut = 'waiting' OR statut = 'active'
+        ORDER BY id DESC LIMIT 1
+    ")->fetch(PDO::FETCH_ASSOC);
+
+    if (!$session) return false;
+
+    // Récupérer uniquement les participants de cette session
+    $stmt = $pdo->prepare("
+        SELECT id FROM participants 
+        WHERE session_id = ? 
+        ORDER BY RAND()
+    ");
+    $stmt->execute([$session['id']]);
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    shuffle($users);
+    if (empty($users)) return false;
 
-    $groupes = array_chunk($users, 25);
+    // Créer les groupes si pas encore créés
+    $check = $pdo->query("SELECT COUNT(*) FROM groupes")->fetchColumn();
+    if ($check == 0) {
+        $pdo->exec("INSERT INTO groupes (nom) VALUES 
+            ('First Round 1'), ('First Round 2'), ('First Round 3')");
+    }
 
-    foreach ($groupes as $index => $groupe) {
-        $groupe_id = $index + 1;
+    // Réinitialiser les groupes existants
+    $pdo->prepare("
+        UPDATE participants SET groupe_id = NULL WHERE session_id = ?
+    ")->execute([$session['id']]);
+
+    // Répartir équitablement en 3 groupes
+    $groupes = [[], [], []];
+    foreach ($users as $index => $user) {
+        $groupes[$index % 3][] = $user;
+    }
+
+    // Sauvegarder en base
+    foreach ($groupes as $groupeIndex => $groupe) {
+        $groupe_id = $groupeIndex + 1;
         foreach ($groupe as $user) {
-            $stmt = $pdo->prepare("UPDATE participants SET groupe_id = ? WHERE id = ?");
-            $stmt->execute([$groupe_id, $user['id']]);
+            $pdo->prepare("UPDATE participants SET groupe_id = ? WHERE id = ?")
+                ->execute([$groupe_id, $user['id']]);
         }
     }
+
     return true;
 }
-
 
 // Importer questions depuis Excel
 function importQuestionsExcel($pdo, $fichier) {
@@ -140,20 +173,33 @@ function getStatistiquesQuestion($pdo, $question_id) {
 }
 
 function selectionnerFinalistes($pdo) {
-    // Récupère le meilleur de chaque groupe (groupe_id 1, 2, 3)
+    // Récupérer la session active
+    $session = $pdo->query("
+        SELECT id FROM sessions 
+        WHERE statut IN ('waiting', 'active') 
+        ORDER BY id DESC LIMIT 1
+    ")->fetch(PDO::FETCH_ASSOC);
+
+    if (!$session) return [];
+
+    $session_id = $session['id'];
     $finalistes = [];
+
     for ($groupe = 1; $groupe <= 3; $groupe++) {
         $stmt = $pdo->prepare("
-            SELECT p.id, p.nom, s.total_points 
-            FROM scores s
-            JOIN participants p ON p.id = s.participant_id
-            WHERE p.groupe_id = ?
+            SELECT p.id, p.nom, COALESCE(s.total_points, 0) as total_points
+            FROM participants p
+            LEFT JOIN scores s ON s.participant_id = p.id
+            WHERE p.groupe_id  = ?
+            AND   p.session_id = ?
             ORDER BY s.total_points DESC
             LIMIT 1
         ");
-        $stmt->execute([$groupe]);
-        $finalistes[] = $stmt->fetch(PDO::FETCH_ASSOC);
+        $stmt->execute([$groupe, $session_id]);
+        $finaliste = $stmt->fetch(PDO::FETCH_ASSOC);
+        $finalistes[] = $finaliste ?: ['id' => null, 'nom' => '—', 'total_points' => 0];
     }
+
     return $finalistes;
 }
 

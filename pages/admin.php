@@ -124,6 +124,8 @@ box-sizing:border-box;
 
 }
 
+
+
 body.light{
 
 --bg:#EEF1FF;
@@ -1646,10 +1648,11 @@ l’intégralité de la compétition depuis une seule interface.
 
             <!-- Boutons -->
             <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-                <button class="btn-gold" onclick="lancerTirage()"
-                        style="display:flex;align-items:center;gap:8px;">
-                    🎲 Lancer le tirage au sort
-                </button>
+            <button class="btn-gold" onclick="lancerTirage()" id="btn-tirage"
+              style="display:flex;align-items:center;gap:8px;opacity:0.5;cursor:not-allowed;"
+              disabled>
+                🎲 Lancer le tirage au sort
+            </button>
                 <button class="btn-outline" onclick="chargerParticipants()"
                         style="display:flex;align-items:center;gap:8px;">
                     🔄 Actualiser la liste
@@ -2145,7 +2148,7 @@ l’intégralité de la compétition depuis une seule interface.
                 </div>
 
                 <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">
-                    / 25 participants
+                 / <span id="nb-participants-round">—</span> participants
                 </div>
 
                 <div style="background:rgba(255,255,255,0.06);border-radius:50px;height:8px;">
@@ -2887,15 +2890,67 @@ isLight ? 'light' : 'dark');
 }
 
 window.onload = () => {
+    if(localStorage.getItem('theme') === 'light'){
+        document.body.classList.add('light');
+        document.getElementById('themeBtn').innerText='☀️';
+    }
 
-if(localStorage.getItem('theme') === 'light'){
+    // Réinitialiser toute l'UI au chargement
+    sessionCourante     = null;
+    roundActuel         = 1;
+    questionIndex       = 0;
+    questionsRound      = [];
+    nbParticipantsRound = 0;
 
-document.body.classList.add('light');
+    // Réinitialiser top 3
+    document.getElementById('top3-list').innerHTML = `
+        <div style="text-align:center;padding:20px;">
+            <img src="../assets/img/trophy.png"
+                 style="width:200px;height:auto;object-fit:contain;display:block;
+                        margin:0 auto 8px auto;
+                        filter:drop-shadow(0 0 15px rgba(245,166,35,0.4));
+                        animation:trophyFloat 3s ease-in-out infinite;">
+            <div style="font-size:13px;color:var(--muted);">En attente...</div>
+        </div>`;
 
-document.getElementById('themeBtn').innerText='☀️';
+    // Réinitialiser finalistes
+    [1,2,3].forEach(n => {
+        document.getElementById('finaliste-' + n + '-nom').textContent = '—';
+        document.getElementById('finaliste-' + n + '-pts').textContent = '0 pts';
+    });
 
-}
+    // Réinitialiser scores finale
+    document.getElementById('scores-finale').innerHTML = `
+        <div style="text-align:center;padding:30px;">
+            <div style="font-size:40px;margin-bottom:10px;">🏆</div>
+            <div style="color:var(--muted);">En attente...</div>
+        </div>`;
 
+    // Réinitialiser rounds
+    document.getElementById('round-badge').textContent       = '⏳ En attente';
+    document.getElementById('round-badge').style.color       = 'var(--gold)';
+    document.getElementById('q-progression').textContent     = '0 / 10';
+    document.getElementById('progress-bar').style.width      = '0%';
+    document.getElementById('nb-reponses').textContent       = '0';
+    document.getElementById('progress-reponses').style.width = '0%';
+    document.getElementById('panel-question').style.display  = 'none';
+    document.getElementById('panel-stats-q').style.display   = 'none';
+
+    // Réinitialiser la liste des questions
+document.getElementById('table-questions').innerHTML = `
+    <tr>
+        <td colspan="8" style="text-align:center;padding:60px 20px;">
+            <div style="font-size:48px;margin-bottom:12px;">📁</div>
+            <div style="font-weight:700;font-size:15px;margin-bottom:6px;">
+                Aucune question importée
+            </div>
+            <div style="font-size:13px;color:var(--muted);">
+                Importez un fichier Excel ou ajoutez vos questions manuellement.
+            </div>
+        </td>
+    </tr>`;
+
+document.getElementById('count-questions').textContent = '(0)';
 }
 
 function showSection(name, el) {
@@ -2920,7 +2975,7 @@ if (name === 'stats') chargerStats();
 }
 
 function chargerParticipants() {
-    fetch('../api/participants.php?action=list')
+    fetch('../api/participant.php?action=list')
     .then(r => r.json())
     .then(participants => {
         const attente = participants.filter(p => !p.groupe_id);
@@ -3027,7 +3082,7 @@ function lancerTirage() {
     }
     if (!confirm('Lancer le tirage au sort ? Les participants seront répartis en 3 groupes.')) return;
 
-    fetch('../api/participants.php?action=tirage', { method: 'POST' })
+    fetch('../api/participant.php?action=tirage', { method: 'POST' })
     .then(r => r.json())
     .then(data => {
         alert('✅ ' + data.message);
@@ -3038,7 +3093,7 @@ function lancerTirage() {
 
 function supprimerParticipant(id) {
     if (!confirm('Supprimer ce participant ?')) return;
-    fetch('../api/participants.php', {
+    fetch('../api/participant.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete', id })
@@ -3190,12 +3245,54 @@ let chronoEnCours = false;
 function selectionnerRound(num) {
     roundActuel = num;
     document.getElementById('round-titre').textContent = 'First Round ' + num;
-    document.getElementById('q-progression').textContent = '0 / 10';
-    document.getElementById('progress-bar').style.width = '0%';
-    document.getElementById('round-badge').innerHTML = '⏳ En attente';
     document.getElementById('panel-question').style.display = 'none';
     document.getElementById('panel-stats-q').style.display = 'none';
 
+    // Vérifier le statut du round en base
+    fetch('../api/session.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'statut_round', round: num })
+    })
+    .then(r => r.json())
+    .then(data => {
+        const btnDemarrer = document.getElementById('btn-demarrer');
+        const badge = document.getElementById('round-badge');
+
+        if (data.statut === 'termine') {
+            // Round terminé — garder l'état terminé
+            badge.textContent = '✅ Terminé';
+            badge.style.color = 'var(--green)';
+            document.getElementById('q-progression').textContent = data.total + ' / ' + data.total;
+            document.getElementById('progress-bar').style.width = '100%';
+            btnDemarrer.style.display = 'flex';
+            btnDemarrer.disabled = true;
+            btnDemarrer.style.opacity = '0.5';
+            btnDemarrer.style.cursor = 'not-allowed';
+            btnDemarrer.style.background = 'rgba(0,255,136,0.2)';
+            btnDemarrer.innerHTML = '✅ &nbsp;Round terminé';
+
+        } else if (data.statut === 'en_cours') {
+            badge.textContent = '▶ En cours';
+            badge.style.color = 'var(--green)';
+            btnDemarrer.style.display = 'none';
+
+        } else {
+            // En attente — bouton actif
+            badge.innerHTML = '⏳ En attente';
+            badge.style.color = 'var(--gold)';
+            document.getElementById('q-progression').textContent = '0 / 10';
+            document.getElementById('progress-bar').style.width = '0%';
+            btnDemarrer.style.display = 'flex';
+            btnDemarrer.disabled = false;
+            btnDemarrer.style.opacity = '1';
+            btnDemarrer.style.cursor = 'pointer';
+            btnDemarrer.style.background = 'linear-gradient(135deg,var(--gold2),var(--gold))';
+            btnDemarrer.innerHTML = '➤ &nbsp;Démarrer le Round';
+        }
+    });
+
+    // Styles boutons sélecteur
     [1,2,3].forEach(i => {
         const btn = document.getElementById('btn-r' + i);
         if (i === num) {
@@ -3215,25 +3312,37 @@ function selectionnerRound(num) {
 // =========================
 // DÉMARRER LE ROUND
 // =========================
+let nbParticipantsRound = 0;
+
 function demarrerRound() {
     if (!confirm('Démarrer First Round ' + roundActuel + ' ?')) return;
+
+    // Récupérer le nombre de participants du groupe
+    fetch('../api/participant.php?action=count_groupe&groupe_id=' + roundActuel)
+    .then(r => r.json())
+    .then(d => { nbParticipantsRound = d.count || 0; });
 
     fetch('../api/session.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'demarrer', round: roundActuel })
+        body: JSON.stringify({ action: 'demarrer_round_unifie', round: roundActuel })
     })
     .then(r => r.json())
     .then(data => {
-        if (data.success) {
-            questionsRound = data.questions || [];
-            questionIndex = 0;
-            document.getElementById('round-badge').textContent = '▶ En cours';
-            document.getElementById('round-badge').style.color = 'var(--green)';
-            document.getElementById('btn-demarrer').style.display = 'none';
-            afficherQuestion();
-        }
-    });
+    if (data.success) {
+        nbParticipantsRound = data.nb_participants || 0;
+        document.getElementById('nb-participants-round').textContent = nbParticipantsRound;
+        questionsRound = data.questions || [];
+        questionIndex = 0;
+        document.getElementById('round-badge').textContent = '▶ En cours';
+        document.getElementById('round-badge').style.color = 'var(--green)';
+        document.getElementById('btn-demarrer').style.display = 'none';
+        afficherQuestion();
+    } else {
+        alert('Erreur : ' + (data.error || JSON.stringify(data)));
+    }
+});
+
 }
 
 // =========================
@@ -3334,7 +3443,7 @@ let chronoFinaleInterval = null;
 // CHARGER LES FINALISTES
 // =========================
 function chargerFinalistes() {
-    fetch('../api/participants.php?action=finalistes')
+    fetch('../api/participant.php?action=finalistes')
     .then(r => r.json())
     .then(data => {
         if (!data.finalistes || data.finalistes.length === 0) {
@@ -3358,19 +3467,25 @@ function demarrerFinale() {
     fetch('../api/session.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'demarrer', round: 'finale' })
+        body: JSON.stringify({ action: 'demarrer_round_unifie', round: 'finale' })
     })
     .then(r => r.json())
     .then(data => {
+        console.log('demarrerFinale response:', data); // DEBUG
         if (data.success) {
             questionsFinale = data.questions || [];
             questionFinaleIndex = 0;
             document.getElementById('btn-demarrer-finale').style.display = 'none';
             afficherQuestionFinale();
+        } else {
+            alert('Erreur : ' + (data.error || JSON.stringify(data)));
         }
+    })
+    .catch(err => {
+        console.log('demarrerFinale error:', err); // DEBUG
+        alert('Erreur réseau : ' + err.message);
     });
 }
-
 // =========================
 // AFFICHER QUESTION FINALE
 // =========================
@@ -3436,6 +3551,13 @@ function topChronoFinale() {
     document.getElementById('btn-top-finale').style.display = 'none';
     document.getElementById('btn-stop-finale').style.display = 'block';
 
+    // ← AJOUTER : notifier le backend que le chrono démarre
+    fetch('../api/session.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'top_chrono' })
+    });
+
     chronoFinaleInterval = setInterval(() => {
         temps--;
         el.textContent = temps;
@@ -3500,32 +3622,45 @@ function questionSuivanteFinale() {
 function finFinale() {
     document.getElementById('panel-question-finale').style.display = 'none';
     document.getElementById('panel-podium').style.display = 'block';
-
-    fetch('../api/classement.php')
+ 
+    // Toujours passer type=finale — session_id est récupéré
+    // automatiquement par classement.php si non fourni
+    fetch(`../api/classement.php?type=finale`)
     .then(r => r.json())
     .then(data => {
-        if (!Array.isArray(data) || data.length === 0) return;
-
-        // Podium
-        const positions = [data[0], data[1], data[2]];
-        [1,2,3].forEach((pos, i) => {
-            const p = positions[i];
-            if (p) {
-                document.getElementById('podium-' + pos + '-nom').textContent = p.nom;
-                document.getElementById('podium-' + pos + '-pts').textContent = p.total_points + ' pts';
-            }
-        });
-
-        // Vérifier ex-aequo
-        if (data[0] && data[1] && data[0].total_points === data[1].total_points) {
+        console.log('Podium finale data:', data); // DEBUG
+ 
+        if (!Array.isArray(data) || data.length === 0) {
+            console.log('Aucun score finale disponible');
+            return;
+        }
+ 
+        const p1 = data[0];
+        const p2 = data[1];
+        const p3 = data[2];
+ 
+        if (p1) {
+            document.getElementById('podium-1-nom').textContent = p1.nom;
+            document.getElementById('podium-1-pts').textContent = p1.total_points + ' pts';
+        }
+        if (p2) {
+            document.getElementById('podium-2-nom').textContent = p2.nom;
+            document.getElementById('podium-2-pts').textContent = p2.total_points + ' pts';
+        }
+        if (p3) {
+            document.getElementById('podium-3-nom').textContent = p3.nom;
+            document.getElementById('podium-3-pts').textContent = p3.total_points + ' pts';
+        }
+ 
+        // Vérifier ex-aequo entre 1er et 2ème
+        if (p1 && p2 && p1.total_points === p2.total_points) {
             document.getElementById('exaequo-section').style.display = 'block';
             document.getElementById('exaequo-msg').textContent =
-                data[0].nom + ' et ' + data[1].nom + ' sont ex-aequo avec ' +
-                data[0].total_points + ' pts !';
+                p1.nom + ' et ' + p2.nom + ' sont ex-aequo avec ' +
+                p1.total_points + ' pts !';
         }
     });
 }
-
 // =========================
 // QUESTION D'OR
 // =========================
@@ -3538,10 +3673,19 @@ function lancerQuestionOr() {
 // SCORES FINALE EN DIRECT
 // =========================
 function chargerScoresFinale() {
-    fetch('../api/classement.php')
+    // Toujours type=finale pour ne voir QUE les scores de la finale
+    fetch(`../api/classement.php?type=finale`)
     .then(r => r.json())
     .then(data => {
-        if (!Array.isArray(data) || data.length === 0) return;
+        if (!Array.isArray(data) || data.length === 0) {
+            document.getElementById('scores-finale').innerHTML = `
+                <div style="text-align:center;padding:30px;">
+                    <div style="font-size:40px;margin-bottom:10px;">🏆</div>
+                    <div style="color:var(--muted);">En attente du début de la finale...</div>
+                </div>`;
+            return;
+        }
+ 
         const medals = ['🥇','🥈','🥉'];
         document.getElementById('scores-finale').innerHTML = data.slice(0,3).map((p, i) => `
             <div style="display:flex;justify-content:space-between;align-items:center;
@@ -3669,21 +3813,65 @@ function genererCode() {
     .then(data => {
         if (!data.success) { alert('Erreur : ' + data.error); return; }
 
-        sessionCourante = { id: data.session_id, code: data.code };
+        // Réinitialiser toutes les variables
+        sessionCourante      = { id: data.session_id, code: data.code };
+        roundActuel          = 1;
+        questionIndex        = 0;
+        questionsRound       = [];
+        nbParticipantsRound  = 0;
+        questionsFinale      = [];
+        questionFinaleIndex  = 0;
 
-        // Afficher le code formaté en 2 groupes de 3
+        // Réinitialiser l'UI rounds
+        document.getElementById('panel-question').style.display   = 'none';
+        document.getElementById('panel-stats-q').style.display    = 'none';
+        document.getElementById('btn-demarrer').style.display     = 'flex';
+        document.getElementById('btn-demarrer').disabled          = false;
+        document.getElementById('btn-demarrer').style.opacity     = '1';
+        document.getElementById('btn-demarrer').innerHTML         = '➤ &nbsp;Démarrer le Round';
+        document.getElementById('round-badge').textContent        = '⏳ En attente';
+        document.getElementById('round-badge').style.color        = 'var(--gold)';
+        document.getElementById('q-progression').textContent      = '0 / 10';
+        document.getElementById('progress-bar').style.width       = '0%';
+        document.getElementById('nb-reponses').textContent        = '0';
+        document.getElementById('progress-reponses').style.width  = '0%';
+
+        // Réinitialiser top 3
+        document.getElementById('top3-list').innerHTML = `
+            <div style="text-align:center;padding:20px;">
+                <img src="../assets/img/trophy.png"
+                     style="width:200px;height:auto;object-fit:contain;display:block;
+                            margin:0 auto 8px auto;
+                            filter:drop-shadow(0 0 15px rgba(245,166,35,0.4));
+                            animation:trophyFloat 3s ease-in-out infinite;">
+                <div style="font-size:13px;color:var(--muted);">En attente...</div>
+            </div>`;
+
+        // Réinitialiser finalistes
+        [1,2,3].forEach(n => {
+            document.getElementById('finaliste-' + n + '-nom').textContent = '—';
+            document.getElementById('finaliste-' + n + '-pts').textContent = '0 pts';
+        });
+
+        // Réinitialiser scores finale
+        document.getElementById('scores-finale').innerHTML = `
+            <div style="text-align:center;padding:30px;">
+                <div style="font-size:40px;margin-bottom:10px;">🏆</div>
+                <div style="color:var(--muted);">En attente...</div>
+            </div>`;
+
+        // Afficher le code
         const c = data.code;
         document.getElementById('session-code-display').textContent =
             c.slice(0,3) + ' ' + c.slice(3);
 
-        document.getElementById('session-nb-wrap').style.display = 'block';
-        document.getElementById('btn-demarrer-session').style.display = 'block';
-        document.getElementById('session-live-badge').style.display = 'flex';
-
+        document.getElementById('session-nb-wrap').style.display  = 'block';
+        document.getElementById('btn-demarrer-session').style.display = 'flex';
+        document.getElementById('session-live-badge').style.display   = 'flex';
         document.getElementById('session-msg').innerHTML =
             '<span style="color:var(--green);">✅ Code généré ! Les participants peuvent rejoindre.</span>';
 
-        // Démarrer le polling participants
+        // Redémarrer polling participants
         if (sessionPollingTimer) clearInterval(sessionPollingTimer);
         sessionPollingTimer = setInterval(actualiserParticipants, 2000);
         actualiserParticipants();
@@ -3756,16 +3944,248 @@ function demarrerSession() {
             clearInterval(sessionPollingTimer);
             document.getElementById('btn-demarrer-session').style.display = 'none';
             document.getElementById('session-msg').innerHTML =
-                '<span style="color:var(--green);">🚀 Session démarrée ! Passez à l\'onglet Rounds.</span>';
+                '<span style="color:var(--green);">🚀 Session démarrée ! Passez à l\'onglet Participants.</span>';
+
+            // Activer le bouton tirage
+            const btnTirage = document.getElementById('btn-tirage');
+            if (btnTirage) {
+                btnTirage.disabled = false;
+                btnTirage.style.opacity = '1';
+                btnTirage.style.cursor = 'pointer';
+            }
+
             setTimeout(() => {
-                showSection('rounds', document.querySelector('[onclick*=rounds]'));
+                showSection('participants', document.querySelector('[onclick*=participants]'));
             }, 1500);
         }
+    });
+}
+
+
+// =========================
+// STOP CHRONO
+// =========================
+function stopChrono() {
+    clearInterval(chronoInterval);
+    chronoEnCours = false;
+    document.getElementById('btn-stop-chrono').style.display = 'none';
+    document.getElementById('btn-afficher-stats').style.display = 'block';
+    document.getElementById('btn-suivante').style.display = 'block';
+}
+
+// =========================
+// AFFICHER STATS
+// =========================
+function afficherStats() {
+    const q = questionsRound[questionIndex];
+    fetch('../api/session.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stats_question', question_id: q.id })
+    })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('panel-stats-q').style.display = 'block';
+        document.getElementById('bonne-rep-display').textContent = 'Choix ' + data.bonne_reponse;
+        const couleurs = ['#4F46E5','#00FF88','#FF4B4B','#F5A623'];
+        document.getElementById('stats-choix').innerHTML = (data.repartition || []).map((r, i) => `
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span style="width:60px;font-size:12px;color:var(--muted);">Choix ${r.reponse}</span>
+                <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:50px;height:8px;">
+                    <div style="height:100%;border-radius:50px;width:${Math.min(r.nb * 10, 100)}%;
+                                background:${couleurs[i % couleurs.length]};"></div>
+                </div>
+                <span style="font-size:12px;font-weight:700;">${r.nb}</span>
+            </div>
+        `).join('');
+    });
+}
+
+// =========================
+// QUESTION SUIVANTE
+// =========================
+function questionSuivante() {
+    fetch('../api/session.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'suivante' })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.termine) {
+            finRound();
+        } else {
+            questionIndex++;
+            afficherQuestion();
+        }
+    });
+}
+
+// =========================
+// FIN DU ROUND
+// =========================
+function finRound() {
+    document.getElementById('panel-question').style.display = 'none';
+    document.getElementById('round-badge').textContent = '✅ Terminé';
+    document.getElementById('round-badge').style.color = 'var(--green)';
+    document.getElementById('btn-demarrer').disabled = true;
+    document.getElementById('btn-demarrer').style.opacity = '0.5';
+    document.getElementById('btn-demarrer').innerHTML = '✅ &nbsp;Round terminé';
+
+    // Charger le meilleur du round
+    fetch('../api/participant.php?action=meilleur_round&groupe_id=' + roundActuel)
+    .then(r => r.json())
+    .then(data => {
+        if (data.participant) {
+            const p = data.participant;
+            const medals = ['🥇', '🥈', '🥉'];
+            const couleurs = ['var(--gold)', '#A78BFA', '#38BDF8'];
+            const n = roundActuel;
+
+            // Mettre à jour le top 3
+            document.getElementById('top3-list').innerHTML = `
+                <div style="display:flex;align-items:center;gap:12px;
+                            padding:16px;border-radius:16px;
+                            background:rgba(245,166,35,0.06);
+                            border:1px solid rgba(245,166,35,0.2);">
+                    <span style="font-size:24px;">${medals[n-1] || '🏅'}</span>
+                    <div style="flex:1;">
+                        <div style="font-weight:800;font-size:15px;">${p.nom}</div>
+                        <div style="font-size:11px;color:var(--muted);">First Round ${n}</div>
+                    </div>
+                    <div style="font-weight:900;color:${couleurs[n-1]};font-size:16px;">
+                        ${p.total_points} pts
+                    </div>
+                </div>
+            `;
+
+            // Mettre à jour les finalistes dans la section finale
+            document.getElementById('finaliste-' + n + '-nom').textContent = p.nom;
+            document.getElementById('finaliste-' + n + '-pts').textContent = p.total_points + ' pts';
+        }
+    });
+}
+
+// =========================
+// POLLING RÉPONSES
+// =========================
+function startPollingReponses(questionId) {
+    if (window.pollingReponsesTimer) clearInterval(window.pollingReponsesTimer);
+    
+    const sessionId = sessionCourante ? sessionCourante.id : '';
+    
+    console.log('sessionCourante:', sessionCourante); // DEBUG
+    console.log('sessionId:', sessionId);             // DEBUG
+    console.log('roundActuel:', roundActuel);         // DEBUG
+
+    window.pollingReponsesTimer = setInterval(() => {
+        fetch(`../api/participant.php?action=count_reponses&question_id=${questionId}&groupe_id=${roundActuel}&session_id=${sessionId}`)
+        .then(r => r.json())
+        .then(data => {
+            console.log('reponses count:', data); // DEBUG
+            const nb = data.count || 0;
+            document.getElementById('nb-reponses').textContent = nb;
+            const pct = nbParticipantsRound > 0 ? Math.min(nb / nbParticipantsRound * 100, 100) : 0;
+            document.getElementById('progress-reponses').style.width = pct + '%';
+        });
+    }, 2000);
+}
+
+
+// =========================
+// TOP 3 EN DIRECT
+// =========================
+function finRound() {
+    document.getElementById('panel-question').style.display = 'none';
+    document.getElementById('round-badge').textContent = '✅ Terminé';
+    document.getElementById('round-badge').style.color = 'var(--green)';
+    document.getElementById('btn-demarrer').disabled = true;
+    document.getElementById('btn-demarrer').style.opacity = '0.5';
+    document.getElementById('btn-demarrer').innerHTML = '✅ &nbsp;Round terminé';
+
+    // Charger le top 3 du round avec filtre session + groupe
+    const sessionId = sessionCourante ? sessionCourante.id : '';
+
+    fetch(`../api/classement.php?groupe_id=${roundActuel}&session_id=${sessionId}`)
+    .then(r => r.json())
+    .then(data => {
+        if (!Array.isArray(data) || data.length === 0) {
+            document.getElementById('top3-list').innerHTML = `
+                <div style="text-align:center;padding:20px;color:var(--muted);">
+                    Aucun score disponible.
+                </div>`;
+            return;
+        }
+
+        const medals  = ['🥇', '🥈', '🥉'];
+        const couleurs = ['var(--gold)', '#A78BFA', '#38BDF8'];
+
+        document.getElementById('top3-list').innerHTML = data.slice(0, 3).map((p, i) => `
+            <div style="display:flex;align-items:center;gap:12px;
+                        padding:14px;border-radius:16px;
+                        background:rgba(245,166,35,0.05);
+                        border:1px solid rgba(245,166,35,0.15);
+                        margin-bottom:8px;">
+                <span style="font-size:22px;">${medals[i]}</span>
+                <div style="flex:1;">
+                    <div style="font-weight:800;font-size:14px;">${p.nom}</div>
+                    <div style="font-size:11px;color:var(--muted);">First Round ${roundActuel}</div>
+                </div>
+                <div style="font-weight:900;color:${couleurs[i]};font-size:16px;">
+                    ${p.total_points} pts
+                </div>
+            </div>
+        `).join('');
+
+        // Mettre à jour les finalistes
+        if (data[0]) {
+            document.getElementById('finaliste-' + roundActuel + '-nom').textContent = data[0].nom;
+            document.getElementById('finaliste-' + roundActuel + '-pts').textContent = data[0].total_points + ' pts';
+        }
+    });
+}
+
+function chargerTop3() {
+    const sessionId = sessionCourante ? sessionCourante.id : '';
+
+    fetch(`../api/classement.php?groupe_id=${roundActuel}&session_id=${sessionId}`)
+    .then(r => r.json())
+    .then(data => {
+        if (!Array.isArray(data) || data.length === 0) {
+            document.getElementById('top3-list').innerHTML = `
+                <div style="text-align:center;padding:20px;color:var(--muted);">
+                    <div style="font-size:40px;margin-bottom:8px;">⏳</div>
+                    <div>En attente des réponses...</div>
+                </div>`;
+            return;
+        }
+
+        const medals  = ['🥇', '🥈', '🥉'];
+        const couleurs = ['var(--gold)', '#A78BFA', '#38BDF8'];
+
+        // Prendre jusqu'à 3, même s'il y en a moins
+        const top = data.slice(0, 3);
+
+        document.getElementById('top3-list').innerHTML = top.map((p, i) => `
+            <div style="display:flex;align-items:center;gap:12px;
+                        padding:14px;border-radius:16px;
+                        background:rgba(245,166,35,0.05);
+                        border:1px solid rgba(245,166,35,0.15);
+                        margin-bottom:8px;transition:.3s;">
+                <span style="font-size:24px;">${medals[i]}</span>
+                <div style="flex:1;">
+                    <div style="font-weight:800;font-size:14px;">${p.nom}</div>
+                    <div style="font-size:11px;color:var(--muted);">First Round ${roundActuel}</div>
+                </div>
+                <div style="font-weight:900;color:${couleurs[i]};font-size:16px;">
+                    ${p.total_points} pts
+                </div>
+            </div>
+        `).join('');
     });
 }
 </script>
 
 </body>
 </html>
-
 

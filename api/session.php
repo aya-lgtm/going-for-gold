@@ -3,16 +3,12 @@ require_once '../config.php';
 header('Content-Type: application/json');
 
 $action = $_GET['action'] ?? '';
-$data   = [];
+$data   = json_decode(file_get_contents('php://input'), true) ?? [];
+$action = $data['action'] ?? $action;
 
-if (empty($action) || $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $data   = json_decode(file_get_contents('php://input'), true) ?? [];
-    $action = $data['action'] ?? $action;
-}
-
-// =========================
-// QUESTION ACTUELLE
-// =========================
+/* =========================================================
+   QUESTION ACTUELLE
+========================================================= */
 if ($action === 'question_actuelle') {
 
     $session = $pdo->query("
@@ -29,20 +25,17 @@ if ($action === 'question_actuelle') {
     $questions = json_decode($session['questions_ids'] ?? '[]', true);
     $index     = $session['question_actuelle'] ?? 0;
 
-    if (empty($questions) || $index >= count($questions)) {
+    if (!$questions || $index >= count($questions)) {
         echo json_encode(['question' => null]);
         exit;
     }
 
-    
-    
+    $qid = $questions[$index];
 
-    $qid  = $questions[$index];
     $stmt = $pdo->prepare("SELECT * FROM questions WHERE id = ?");
     $stmt->execute([$qid]);
     $question = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // Ne pas envoyer la bonne réponse au participant !
     unset($question['bonne_reponse']);
 
     echo json_encode([
@@ -53,50 +46,99 @@ if ($action === 'question_actuelle') {
     exit;
 }
 
-// =========================
-// DÉMARRER UN ROUND
-// =========================
-elseif ($action === 'demarrer') {
 
+/* =========================================================
+   DEMARRER ROUND + SESSION (UNIFIÉ)
+========================================================= */
+elseif ($action === 'demarrer_round_unifie') {
+
+    // Définir $round EN PREMIER
     $round = $data['round'] ?? 1;
-    require_once '../includes/functions.php';
+    $session_id = $data['session_id'] ?? 0;
 
-    $nb_questions = ($round === 'finale') ? 5 : 10;
-    $questions    = getQuestionsAleatoires($pdo, $nb_questions);
-    $ids          = array_column($questions, 'id');
-
-    // Fermer sessions précédentes
-    $pdo->exec("UPDATE sessions_quiz SET statut = 'termine' WHERE statut = 'en_cours'");
-
-    // Créer nouvelle session
-    $stmt = $pdo->prepare("
-        INSERT INTO sessions_quiz 
-        (statut, question_actuelle, type_round, questions_ids, chrono_demarre) 
-        VALUES ('en_cours', 0, ?, ?, 0)
+    // Vérifier si ce round est déjà en cours
+    $type_round_check = ($round === 'finale') ? 'finale' : 'first_round_' . $round;
+    $enCours = $pdo->prepare("
+        SELECT COUNT(*) FROM sessions_quiz 
+        WHERE statut = 'en_cours' AND type_round = ?
     ");
-    $stmt->execute([
-        $round === 'finale' ? 'finale' : 'first_round_' . $round,
-        json_encode($ids)
-    ]);
+    $enCours->execute([$type_round_check]);
+    if ($enCours->fetchColumn() > 0) {
+        echo json_encode(['success' => false, 'error' => 'Ce round est déjà en cours !']);
+        exit;
+    }
 
-    echo json_encode([
-        'success'   => true,
-        'questions' => $questions,  // ← renvoyer les questions à l'admin
-        'message'   => 'Round ' . $round . ' démarré !'
-    ]);
-    exit;
+    // Activer session principale
+    if ($session_id) {
+        $pdo->prepare("UPDATE sessions SET statut = 'active' WHERE id = ?")
+            ->execute([$session_id]);
+    }
+
+    // Générer questions
+    require_once '../includes/functions.php';
+    $nb_questions = ($round === 'finale') ? 5 : 10;
+    $questions = getQuestionsAleatoires($pdo, $nb_questions);
+    $ids = array_column($questions, 'id');
+
+    // Fermer uniquement le même type de round
+    $pdo->prepare("UPDATE sessions_quiz SET statut = 'termine' WHERE statut = 'en_cours' AND type_round = ?")
+        ->execute([$type_round_check]);
+
+    // Créer nouveau round
+    $pdo->prepare("
+        INSERT INTO sessions_quiz (statut, question_actuelle, type_round, questions_ids, chrono_demarre)
+        VALUES ('en_cours', 0, ?, ?, 0)
+    ")->execute([$type_round_check, json_encode($ids)]);
+
+   
+// Compter participants du groupe ET de la session courante
+$groupe_id = ($round === 'finale') ? null : (int)$round;
+
+// Récupérer la session active
+$session_active = $pdo->query("
+    SELECT id FROM sessions 
+    WHERE statut IN ('waiting','active') 
+    ORDER BY id DESC LIMIT 1
+")->fetch(PDO::FETCH_ASSOC);
+
+$nb_stmt = $pdo->prepare("
+    SELECT COUNT(*) FROM participants 
+    WHERE groupe_id = ? AND session_id = ?
+");
+$nb_stmt->execute([$groupe_id, $session_active['id'] ?? 0]);
+$nb_participants = $nb_stmt->fetchColumn();
+
+echo json_encode([
+    'success'         => true,
+    'session_started' => true,
+    'questions'       => $questions,
+    'nb_participants' => (int)$nb_participants
+]);
+exit;
+    
 }
 
-// =========================
-// TOP CHRONO
-// =========================
+
+/* =========================================================
+   TOP CHRONO
+========================================================= */
 elseif ($action === 'top_chrono') {
 
+    // Chercher d'abord la finale en cours
     $session = $pdo->query("
         SELECT * FROM sessions_quiz 
-        WHERE statut = 'en_cours' 
+        WHERE statut = 'en_cours' AND type_round = 'finale'
         ORDER BY id DESC LIMIT 1
     ")->fetch(PDO::FETCH_ASSOC);
+
+    // Sinon prendre n'importe quelle session en cours
+    if (!$session) {
+        $session = $pdo->query("
+            SELECT * FROM sessions_quiz 
+            WHERE statut = 'en_cours' 
+            ORDER BY id DESC LIMIT 1
+        ")->fetch(PDO::FETCH_ASSOC);
+    }
 
     if ($session) {
         $pdo->prepare("
@@ -110,9 +152,9 @@ elseif ($action === 'top_chrono') {
     exit;
 }
 
-// =========================
-// QUESTION SUIVANTE
-// =========================
+/* =========================================================
+   QUESTION SUIVANTE
+========================================================= */
 elseif ($action === 'suivante') {
 
     $session = $pdo->query("
@@ -122,27 +164,42 @@ elseif ($action === 'suivante') {
     ")->fetch(PDO::FETCH_ASSOC);
 
     if ($session) {
-        $nouveau_index = $session['question_actuelle'] + 1;
-        $questions     = json_decode($session['questions_ids'], true);
 
-        if ($nouveau_index >= count($questions)) {
+        $index = $session['question_actuelle'] + 1;
+        $questions = json_decode($session['questions_ids'], true);
+
+        if ($index >= count($questions)) {
+
             $pdo->exec("UPDATE sessions_quiz SET statut = 'termine' WHERE statut = 'en_cours'");
-            echo json_encode(['success' => true, 'termine' => true]);
+
+            echo json_encode([
+                'success' => true,
+                'termine' => true
+            ]);
         } else {
-            $pdo->prepare("
+
+            $stmt = $pdo->prepare("
                 UPDATE sessions_quiz 
                 SET question_actuelle = ?, chrono_demarre = 0 
                 WHERE id = ?
-            ")->execute([$nouveau_index, $session['id']]);
-            echo json_encode(['success' => true, 'termine' => false]);
+            ");
+
+            $stmt->execute([$index, $session['id']]);
+
+            echo json_encode([
+                'success' => true,
+                'termine' => false
+            ]);
         }
     }
+
     exit;
 }
 
-// =========================
-// STATUT DE LA SESSION
-// =========================
+
+/* =========================================================
+   STATUT SESSION ROUND
+========================================================= */
 elseif ($action === 'statut') {
 
     $session = $pdo->query("
@@ -153,15 +210,16 @@ elseif ($action === 'statut') {
 
     echo json_encode([
         'actif'  => (bool)$session,
-        'statut' => $session ? $session['statut'] : 'en_attente',
-        'round'  => $session ? $session['type_round'] : null
+        'statut' => $session['statut'] ?? 'en_attente',
+        'round'  => $session['type_round'] ?? null
     ]);
     exit;
 }
 
-// =========================
-// AFFICHER STATS QUESTION
-// =========================
+
+/* =========================================================
+   STATS QUESTION
+========================================================= */
 elseif ($action === 'stats_question') {
 
     $question_id = $data['question_id'] ?? $_GET['question_id'] ?? 0;
@@ -173,36 +231,44 @@ elseif ($action === 'stats_question') {
         GROUP BY reponse
     ");
     $stmt->execute([$question_id]);
-    $repartition = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $stmt2 = $pdo->prepare("SELECT bonne_reponse FROM questions WHERE id = ?");
     $stmt2->execute([$question_id]);
     $q = $stmt2->fetch();
 
     echo json_encode([
-        'repartition'   => $repartition,
+        'repartition'   => $stmt->fetchAll(PDO::FETCH_ASSOC),
         'bonne_reponse' => $q['bonne_reponse'] ?? null
     ]);
     exit;
 }
 
 
-// =========================
-// CRÉER UNE SESSION (code Kahoot)
-// =========================
+/* =========================================================
+   CRÉER SESSION (CODE)
+========================================================= */
 elseif ($action === 'creer') {
 
-    // Invalider les anciennes sessions en attente
     $pdo->exec("UPDATE sessions SET statut = 'done' WHERE statut = 'waiting'");
+    
+    // Terminer tous les anciens rounds
+    $pdo->exec("UPDATE sessions_quiz SET statut = 'termine' WHERE statut = 'en_cours'");
+    
+    // Supprimer les questions et les réponses
+    $pdo->exec("DELETE FROM reponses");
+    $pdo->exec("DELETE FROM questions");
+    $pdo->exec("DELETE FROM scores");
 
-    // Générer un code unique à 6 chiffres
     do {
         $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         $stmt = $pdo->prepare("SELECT id FROM sessions WHERE code = ?");
         $stmt->execute([$code]);
     } while ($stmt->fetch());
 
-    $stmt = $pdo->prepare("INSERT INTO sessions (code, statut) VALUES (?, 'waiting')");
+    $stmt = $pdo->prepare("
+        INSERT INTO sessions (code, statut)
+        VALUES (?, 'waiting')
+    ");
     $stmt->execute([$code]);
 
     echo json_encode([
@@ -212,15 +278,15 @@ elseif ($action === 'creer') {
     ]);
     exit;
 }
-
-// =========================
-// STATUT SESSION PAR CODE (polling participants)
-// =========================
+/* =========================================================
+   STATUT PAR CODE
+========================================================= */
 elseif ($action === 'statut_code') {
 
     $code = trim($_GET['code'] ?? '');
+
     if (!$code) {
-        echo json_encode(['success' => false, 'error' => 'Code manquant']);
+        echo json_encode(['success' => false]);
         exit;
     }
 
@@ -229,115 +295,146 @@ elseif ($action === 'statut_code') {
     $session = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$session) {
-        echo json_encode(['success' => false, 'error' => 'Code invalide']);
+        echo json_encode(['success' => false]);
         exit;
     }
 
     $stmt2 = $pdo->prepare("SELECT COUNT(*) as nb FROM participants WHERE session_id = ?");
     $stmt2->execute([$session['id']]);
-    $nb = $stmt2->fetch(PDO::FETCH_ASSOC)['nb'];
+    $nb = $stmt2->fetch()['nb'];
 
     echo json_encode([
-        'success'         => true,
-        'statut'          => $session['statut'],
+        'success' => true,
+        'statut' => $session['statut'],
         'nb_participants' => (int)$nb,
-        'session_id'      => $session['id']
+        'session_id' => $session['id']
     ]);
     exit;
 }
 
-// =========================
-// PARTICIPANTS D'UNE SESSION (admin live)
-// =========================
+
+/* =========================================================
+   PARTICIPANTS LIVE
+========================================================= */
 elseif ($action === 'participants_session') {
 
     $session_id = $_GET['session_id'] ?? 0;
+
     $stmt = $pdo->prepare("
         SELECT id, nom, created_at 
         FROM participants 
-        WHERE session_id = ? 
+        WHERE session_id = ?
         ORDER BY created_at ASC
     ");
+
     $stmt->execute([$session_id]);
+
     echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
     exit;
 }
 
-// =========================
-// DÉMARRER LA SESSION (organisateur)
-// =========================
-elseif ($action === 'demarrer_session') {
 
-    $session_id = $data['session_id'] ?? 0;
-    if (!$session_id) {
-        echo json_encode(['success' => false, 'error' => 'session_id requis']);
-        exit;
-    }
-
-    $stmt = $pdo->prepare("UPDATE sessions SET statut = 'active' WHERE id = ?");
-    $stmt->execute([$session_id]);
-
-    echo json_encode(['success' => true, 'message' => 'Session démarrée !']);
-    exit;
-}
-
-// =========================
-// REJOINDRE UNE SESSION (participant)
-// =========================
+/* =========================================================
+   REJOINDRE SESSION
+========================================================= */
+/* =========================================================
+   REJOINDRE SESSION
+========================================================= */
 elseif ($action === 'rejoindre') {
 
     $code = trim($data['code'] ?? '');
     $nom  = trim($data['nom'] ?? '');
 
     if (!$code || !$nom) {
-        echo json_encode(['success' => false, 'error' => 'Code et nom requis']);
+        echo json_encode(['success' => false]);
         exit;
     }
 
-    // Vérifier la session
     $stmt = $pdo->prepare("SELECT * FROM sessions WHERE code = ?");
     $stmt->execute([$code]);
-    $session = $stmt->fetch(PDO::FETCH_ASSOC);
+    $session = $stmt->fetch();
 
-    if (!$session) {
-        echo json_encode(['success' => false, 'error' => 'Code invalide. Vérifiez le code affiché.']);
-        exit;
-    }
-    if ($session['statut'] === 'done') {
-        echo json_encode(['success' => false, 'error' => 'Cette session est terminée.']);
-        exit;
-    }
-    if ($session['statut'] === 'active') {
-        echo json_encode(['success' => false, 'error' => 'La compétition a déjà commencé.']);
+    if (!$session || $session['statut'] !== 'waiting') {
+        echo json_encode(['success' => false, 'error' => 'Session non disponible']);
         exit;
     }
 
-    // Nom déjà pris dans cette session ?
-    $stmt2 = $pdo->prepare("SELECT id FROM participants WHERE session_id = ? AND nom = ?");
-    $stmt2->execute([$session['id'], $nom]);
-    if ($stmt2->fetch()) {
-        echo json_encode(['success' => false, 'error' => 'Ce nom est déjà utilisé.']);
-        exit;
-    }
-
-    // Insérer le participant
-    $stmt3 = $pdo->prepare("
-        INSERT INTO participants (nom, session_id, session_code, created_at) 
+    $stmt = $pdo->prepare("
+        INSERT INTO participants (nom, session_id, session_code, created_at)
         VALUES (?, ?, ?, NOW())
     ");
-    $stmt3->execute([$nom, $session['id'], $code]);
+    $stmt->execute([$nom, $session['id'], $code]);
+    $participant_id = $pdo->lastInsertId();
 
-    $stmt4 = $pdo->prepare("SELECT COUNT(*) as nb FROM participants WHERE session_id = ?");
-    $stmt4->execute([$session['id']]);
-    $nb = $stmt4->fetch(PDO::FETCH_ASSOC)['nb'];
+    // Sauvegarder en session PHP
+    session_start();
+    $_SESSION['participant_id'] = $participant_id;
+    $_SESSION['nom']            = $nom;
+    $_SESSION['session_id']     = $session['id'];
+    $_SESSION['groupe_nom']     = null;
 
     echo json_encode([
-        'success'         => true,
-        'participant_id'  => $pdo->lastInsertId(),
-        'session_id'      => $session['id'],
-        'nb_participants' => (int)$nb
+        'success'        => true,
+        'participant_id' => $participant_id,
+        'session_id'     => $session['id']
     ]);
     exit;
 }
 
-echo json_encode(['error' => 'Action inconnue: ' . $action]);
+/* =========================================================
+   DÉMARRER SESSION (fermer l'inscription)
+========================================================= */
+elseif ($action === 'demarrer_session') {
+
+    $session_id = $data['session_id'] ?? 0;
+
+    if (!$session_id) {
+        echo json_encode(['success' => false, 'error' => 'session_id manquant']);
+        exit;
+    }
+
+    $stmt = $pdo->prepare("UPDATE sessions SET statut = 'active' WHERE id = ?");
+    $stmt->execute([$session_id]);
+
+    echo json_encode(['success' => true]);
+    exit;
+}
+
+
+
+
+elseif ($action === 'statut_round') {
+    $round = $data['round'] ?? 1;
+    $type_round = 'first_round_' . $round;
+
+    // Chercher uniquement les sessions de la compétition en cours
+    $stmt = $pdo->prepare("
+        SELECT statut, questions_ids, question_actuelle 
+        FROM sessions_quiz 
+        WHERE type_round = ?
+        AND created_at >= (
+            SELECT created_at FROM sessions 
+            WHERE statut IN ('waiting','active') 
+            ORDER BY id DESC LIMIT 1
+        )
+        ORDER BY id DESC LIMIT 1
+    ");
+    $stmt->execute([$type_round]);
+    $session = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$session) {
+        echo json_encode(['statut' => 'en_attente']);
+        exit;
+    }
+
+    $total = count(json_decode($session['questions_ids'] ?? '[]', true));
+    echo json_encode([
+        'statut' => $session['statut'],
+        'total'  => $total
+    ]);
+    exit;
+}
+/* =========================================================
+   DEFAULT
+========================================================= */
+echo json_encode(['error' => 'Action inconnue']);
