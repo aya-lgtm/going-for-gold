@@ -1,6 +1,5 @@
 
 <?php
-// Pas de session PHP nécessaire — données lues depuis localStorage côté JS
 ?>
 
 <!DOCTYPE html>
@@ -336,6 +335,7 @@ const state = {
     questionActuelle: null,
     reponseEnvoyee:   false,
     canAnswer: false,
+    roundActuel: null,
     tempsDebut:       null,
     pollingTimer:     null,
     questionIndex:    0,
@@ -344,7 +344,7 @@ const state = {
     chronoInterval:   null,
     phase: 'attente',
     chronoDejaFait: false,
-    pollingType: null  // 🔥 AJOUT : pour savoir quel polling est actif
+    pollingType: null  
 };
 
 
@@ -395,7 +395,7 @@ function entrerSalleAttente() {
     document.getElementById('badge-nom').textContent = state.nom;
 
     showScreen('attente');
-    demarrerPollingSession(); // 🔥 UN SEUL APPEL
+    demarrerPollingSession();
 }
 
 
@@ -404,18 +404,27 @@ async function demarrerPollingSession() {
     
 
     const poll = async () => {
+        if (state.phase === 'question' || state.phase === 'resultat' || 
+        state.phase === 'classement' || state.phase === 'fin') {
+        return;
+    }
         try {
             const resDep = await fetch('../api/session.php?action=statut');
         const dataDep = await resDep.json();
 
         if (dataDep.round === 'departage' && dataDep.actif === true) {
-    const resQ = await fetch('../api/session.php?action=question_actuelle');
-    const dataQ = await resQ.json();
-    if (dataQ.question && dataQ.question.id !== state.questionActuelle?.id) {
-        arreterTousPollings();
-        chargerQuestion(dataQ.question, dataQ.numero, dataQ.total, 'departage');
+    const resStatus = await fetch(`../api/participant.php?action=status&participant_id=${state.participantId}`);
+    const dataStatus = await resStatus.json();
+    if (dataStatus.session_phase === 'en_cours' && dataStatus.question) {
+        if (!state.questionActuelle || state.questionActuelle.id !== dataStatus.question.id) {
+            arreterTousPollings();
+            chargerQuestion(dataStatus.question, dataStatus.question_index, dataStatus.total_questions, 'departage');
+        }else {
+            
+            arreterTousPollings();
+        }
     }
-    return; 
+    return;
 }
             const res = await fetch(
                 `../api/participant.php?action=status&participant_id=${state.participantId}&update_activity=1`
@@ -447,30 +456,26 @@ async function demarrerPollingSession() {
                 } 
             }
             
-            // 🔥 NOUVEAU : Détecter le départage même en phase attente
+           
             if (data.session_phase === 'attente') {
                 try {
                     const resDep = await fetch('../api/session.php?action=statut');
                     const dataDep = await resDep.json();
                     
                     if (dataDep.round === 'departage' && dataDep.actif === true) {
-                    console.log('✅ DÉPARTAGE DÉTECTÉ - chargement direct');
-                    clearInterval(state.pollingTimer);
-                    state.pollingTimer = null;
-                    state.pollingType = null;
-                    
-                    // Charger directement la question
-                    const resQ = await fetch('../api/session.php?action=question_actuelle');
-                    const dataQ = await resQ.json();
-                    
-                    if (dataQ.question) {
-                        chargerQuestion(dataQ.question, dataQ.numero, dataQ.total, 'departage');
-                    }
-                    return;
-                }
+    const resStatus = await fetch(`../api/participant.php?action=status&participant_id=${state.participantId}`);
+    const dataStatus = await resStatus.json();
+    if (dataStatus.session_phase === 'en_cours' && dataStatus.question) {
+        if (!state.questionActuelle || state.questionActuelle.id !== dataStatus.question.id) {
+            arreterTousPollings();
+            chargerQuestion(dataStatus.question, dataStatus.question_index, dataStatus.total_questions, 'departage');
+        }
+    }
+    return;
+}
                 } catch(e) {}
             }
-        } catch(e) { /* silencieux */ }
+        } catch(e) {  }
     };
 
     await poll();
@@ -510,6 +515,7 @@ function chargerQuestion(question, index, total, round) {
     state.totalQuestions   = total;
     state.chronoEnCours    = false;
     state.canAnswer        = false;
+    state.roundActuel = round;
 
     // Mise à jour UI
 const roundLabels = {
@@ -540,8 +546,7 @@ document.getElementById('q-round-label').textContent =
 
 
     if(round === 'departage' ) {
-        // 🔥 Pour le départage, démarrer le chrono immédiatement
-        // sans attendre chrono_demarre du backend
+      
         state.chronoDejaFait = true;
         demarrerChrono(10);
     } else {
@@ -622,7 +627,7 @@ async function repondre(choix) {
     if (!state.canAnswer || state.reponseEnvoyee) return;
     if (!state.questionActuelle) return;
 
-  state.reponseEnvoyee = true;  // 🔥 IMMÉDIATEMENT, avant tout
+  state.reponseEnvoyee = true;  
     state.canAnswer = false;   
 
 
@@ -713,16 +718,27 @@ async function demarrerPollingResultat() {
         try {
 
         const resDep = await fetch('../api/session.php?action=statut');
-        const dataDep = await resDep.json();
+const dataDep = await resDep.json();
 
-        if (dataDep.round === 'departage' && dataDep.actif === true) {
+if (dataDep.round === 'departage' && dataDep.actif === true) {
     const resQ = await fetch('../api/session.php?action=question_actuelle');
     const dataQ = await resQ.json();
     if (dataQ.question && dataQ.question.id !== state.questionActuelle?.id) {
         arreterTousPollings();
         chargerQuestion(dataQ.question, dataQ.numero, dataQ.total, 'departage');
-            return; 
+        return; 
+    }
+}
 
+if (state.questionActuelle && dataDep.actif === false && dataDep.round === null) {
+    if (state.roundActuel === 'departage') {
+        const res2 = await fetch(`../api/participant.php?action=prochaine_question&participant_id=${state.participantId}`);
+        const data2 = await res2.json();
+        if (data2.phase === 'fin') {
+            arreterTousPollings();
+            afficherFin(data2);
+            return;
+        }
     }
 }
             const res = await fetch(
@@ -730,8 +746,7 @@ async function demarrerPollingResultat() {
             );
             const data = await res.json();
 
-            // ⚠️ CORRECTION : on ignore chrono_demarre ici, c'est demarrerPollingChrono qui gère ça
-            // On ne fait QUE surveiller les transitions de phase
+    
 
             if (data.phase === 'resultat') {
                 clearInterval(state.pollingTimer);
@@ -770,8 +785,16 @@ async function demarrerPollingResultat() {
 
             } else if (data.phase === 'fin') {
                     if (data.round === 'departage') {
-        clearInterval(state.pollingTimer);
-        entrerSalleAttente();
+        const resStatut = await fetch('../api/session.php?action=statut');
+        const dataStatut = await resStatut.json();
+        if (dataStatut.actif === false && dataStatut.round === null) {
+            // Récupérer le rang final depuis le backend
+            const resFinal = await fetch(`../api/participant.php?action=prochaine_question&participant_id=${state.participantId}`);
+            const dataFinal = await resFinal.json();
+            clearInterval(state.pollingTimer);
+            afficherFin(dataFinal);
+        }
+        // Sinon continuer à poller — le départage n'est pas encore terminé
         return;
     }
                 if (data.round === 'finale') {
@@ -951,7 +974,6 @@ function afficherFin(data) {
             'Merci pour votre participation. Résultats annoncés prochainement.';
     }
 
-    // ✅ Afficher le podium pour TOUS si la finale est terminée
     if (estFinale) {
         afficherPodiumParticipant();
     }
@@ -1006,20 +1028,21 @@ function demarrerPollingFinale() {
 
         // Départage en cours
         if (dataDep.round === 'departage' && dataDep.actif === true) {
-            const resQ = await fetch('../api/session.php?action=question_actuelle');
-            const dataQ = await resQ.json();
-            if (dataQ.question && dataQ.question.id !== state.questionActuelle?.id) {
-                arreterTousPollings();
-                chargerQuestion(dataQ.question, dataQ.numero, dataQ.total, 'departage');
-            }
-            return;
+    const resStatus = await fetch(`../api/participant.php?action=status&participant_id=${state.participantId}`);
+    const dataStatus = await resStatus.json();
+    if (dataStatus.session_phase === 'en_cours' && dataStatus.question) {
+        if (!state.questionActuelle || state.questionActuelle.id !== dataStatus.question.id) {
+            arreterTousPollings();
+            chargerQuestion(dataStatus.question, dataStatus.question_index, dataStatus.total_questions, 'departage');
         }
+    }
+    return;
+}
 
-        // 🔥 Finale terminée = session inactive ET aucun round en cours
         if (dataDep.actif === false && dataDep.round === null) {
-            const resClassement = await fetch('../api/classement.php?type=finale');
-            const podium = await resClassement.json();
-            if (Array.isArray(podium) && podium.length > 0) {
+    const resClassement = await fetch('../api/classement.php?type=finale');
+    const podium = await resClassement.json();
+    if (Array.isArray(podium) && podium.length > 0 && podium[0].total_points > 0) {
                 arreterTousPollings();
                 const monRang  = podium.findIndex(p => p.id == state.participantId) + 1;
                 const monScore = podium.find(p => p.id == state.participantId)?.total_points || 0;
@@ -1034,7 +1057,6 @@ function demarrerPollingFinale() {
     } catch(e) {}
 }   
             
-            // Si terminé
             // Si terminé
 if (data.session_phase === 'termine') {
     clearInterval(state.pollingTimer);
@@ -1105,11 +1127,7 @@ function demarrerPollingChrono() {
                 arreterTousPollings();
                 return;
                 }
-                    // 🔥 Condition complète :
-                // 1. Le backend dit que le chrono doit tourner
-                // 2. Le chrono n'est pas déjà en cours
-                // 3. Le participant n'a PAS encore répondu
-                // 4. On n'a PAS déjà fait le chrono pour cette question
+                    
                 if (data.chrono_demarre === true && !state.chronoEnCours && !state.reponseEnvoyee && !state.chronoDejaFait) {
                     console.log("⏰ DÉMARRAGE DU CHRONO (une seule fois)");
                     state.chronoDejaFait = true;  // ← IMPORTANT !
@@ -1205,7 +1223,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else if (data.session_phase === 'termine') {
             afficherFin(data);
         } else {
-            entrerSalleAttente(); // 🔥 UN SEUL APPEL
+            entrerSalleAttente(); 
         }
     } catch(e) {
         entrerSalleAttente();

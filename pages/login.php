@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Connexion Staff - Going For Gold</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" type="image/png" href="../assets/img/favicon.png">
     <link href="../assets/css/style-index.css" rel="stylesheet">
 </head>
 

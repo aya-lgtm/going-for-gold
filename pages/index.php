@@ -286,12 +286,12 @@ let currentPlayers = 18;
 
 setInterval(() => {
 
-    if(currentPlayers < 25){
+    if(currentPlayers < 75){
 
         currentPlayers++;
 
         document.getElementById('onlineCount').innerText =
-        currentPlayers + " / 25";
+        currentPlayers + " / 75";
     }
 
 },8000);

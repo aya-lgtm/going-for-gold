@@ -2186,7 +2186,8 @@ function topChronoDepartage(questionId) {
             action: 'demarrer_round_unifie',
             round: 'departage',
             question_id: questionId,
-            session_id: sessionCourante.id
+            session_id: sessionCourante.id,
+            groupe_id: roundActuel
         })
     })
     .then(r => r.json())
