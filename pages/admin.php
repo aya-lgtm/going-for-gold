@@ -1,20 +1,12 @@
-<!-- =========================================================
-GOING FOR GOLD — ADMIN DASHBOARD PRO EDITION
-VERSION : PREMIUM UI/UX
-AMÉLIORATIONS :
-✔ Structure plus premium
-✔ Workflow compétition clair
-✔ Timeline des rounds
-✔ Hero admin
-✔ KPI cards modernes
-✔ Sidebar plus élégante
-✔ Design plus cohérent avec votre landing
-✔ Glassmorphism amélioré
-✔ Animations premium
-✔ Meilleure hiérarchie visuelle
-✔ Concept orienté “Control Center”
-========================================================= -->
+<?php
+session_start();
 
+// Si la variable de session n'est pas définie, on dégage l'intrus
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    header('Location: login.php');
+    exit();
+}
+?>
 
 <!DOCTYPE html>
 <html lang="fr">
@@ -25,1009 +17,9 @@ AMÉLIORATIONS :
 <title>Going For Gold — Control Center</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/style.css">
-<style>
+<link rel="stylesheet" href="../assets/css/style-admin.css">
+<link rel="icon" type="image/png" href="../assets/img/favicon.png">
 
-
-/* ===============================
-   BRILLANCE DORÉE SUR LES PANELS
-=============================== */
-
-@keyframes borderGlow {
-    0%   { opacity: 0.3; }
-    50%  { opacity: 1; }
-    100% { opacity: 0.3; }
-}
-
-@keyframes shimmer {
-    0%   { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
-}
-
-/* Effet glow sur les panels questions */
-#section-questions .panel {
-    position: relative;
-}
-
-#section-questions .panel::after {
-    content: '';
-    position: absolute;
-    top: -1px;
-    left: 20%;
-    right: 20%;
-    height: 2px;
-    background: linear-gradient(90deg,
-        transparent,
-        var(--gold2),
-        var(--gold),
-        var(--gold2),
-        transparent
-    );
-    border-radius: 50%;
-    animation: borderGlow 2.5s ease-in-out infinite;
-    filter: blur(1px);
-}
-
-/* Coin brillant en haut à gauche */
-#section-questions .panel::before {
-    content: '';
-    position: absolute;
-    top: -1px;
-    left: -1px;
-    width: 60px;
-    height: 60px;
-    background: radial-gradient(circle at top left,
-        rgba(255,215,0,0.4),
-        transparent 70%
-    );
-    border-radius: 28px 0 0 0;
-    animation: borderGlow 3s ease-in-out infinite;
-    pointer-events: none;
-    z-index: 0;
-}
-
-@keyframes trophyFloat {
-    0%   { transform: translateY(0px) rotate(-2deg); }
-    50%  { transform: translateY(-12px) rotate(2deg); }
-    100% { transform: translateY(0px) rotate(-2deg); }
-}
-
-*{
-margin:0;
-padding:0;
-box-sizing:border-box;
-}
-
-:root{
-
---gold:#F5A623;
---gold2:#FFD700;
-
---bg:#050510;
---bg2:#0C0C1D;
-
---sidebar:#070714;
-
---card:rgba(255,255,255,0.05);
---card-hover:rgba(255,255,255,0.08);
-
---border:rgba(245,166,35,0.18);
-
---text:#FFFFFF;
---muted:#8E8EB1;
-
---green:#00FF88;
---red:#FF4B4B;
---purple:#7C3AED;
-
---shadow:0 10px 35px rgba(0,0,0,0.45);
-
-}
-
-
-
-body.light{
-
---bg:#EEF1FF;
---bg2:#FFFFFF;
---sidebar:#EAEAFB;
-
---card:rgba(255,255,255,0.75);
---card-hover:rgba(255,255,255,0.95);
-
---border:rgba(180,120,0,0.18);
-
---text:#18182B;
---muted:#66668A;
-
---shadow:0 10px 30px rgba(0,0,0,0.08);
-
-}
-
-body{
-
-font-family:'Poppins',sans-serif;
-background:
-radial-gradient(circle at top,#1B1144 0%,transparent 30%),
-var(--bg);
-
-color:var(--text);
-
-display:flex;
-min-height:100vh;
-
-overflow-x:hidden;
-
-transition:.4s ease;
-
-}
-
-/* =======================================================
-SIDEBAR
-======================================================= */
-
-.sidebar{
-
-width:270px;
-position:fixed;
-top:0;
-left:0;
-bottom:0;
-
-background:rgba(7,7,20,0.92);
-
-backdrop-filter:blur(18px);
-
-border-right:1px solid var(--border);
-
-display:flex;
-flex-direction:column;
-
-z-index:100;
-
-}
-
-body.light .sidebar{
-
-background:rgba(255,255,255,0.85);
-
-}
-
-.logo-area{
-
-padding:26px;
-
-border-bottom:1px solid var(--border);
-
-}
-
-.logo-area img{
-
-height:48px;
-
-}
-
-.logo-sub{
-
-margin-top:10px;
-
-font-size:11px;
-letter-spacing:2px;
-color:var(--muted);
-
-}
-
-.sidebar-menu{
-
-padding:18px 14px;
-
-display:flex;
-flex-direction:column;
-gap:8px;
-
-flex:1;
-
-}
-
-.menu-item{
-
-display:flex;
-align-items:center;
-gap:14px;
-
-padding:14px 16px;
-
-border-radius:16px;
-
-cursor:pointer;
-
-transition:.3s ease;
-
-font-size:13px;
-font-weight:600;
-
-color:var(--muted);
-
-border:1px solid transparent;
-
-}
-
-.menu-item:hover{
-
-background:var(--card);
-color:#fff;
-
-transform:translateX(4px);
-
-}
-
-body.light .menu-item:hover{
-
-color:#18182B;
-
-}
-
-.menu-item.active{
-
-background:rgba(245,166,35,0.08);
-
-border:1px solid var(--border);
-
-color:var(--gold);
-
-box-shadow:0 0 0 1px rgba(245,166,35,0.12);
-
-}
-
-.menu-icon{
-
-font-size:18px;
-
-width:24px;
-
-text-align:center;
-
-}
-
-.sidebar-bottom{
-
-padding:20px;
-
-border-top:1px solid var(--border);
-
-}
-
-.server-box{
-
-background:var(--card);
-
-border:1px solid var(--border);
-
-padding:16px;
-
-border-radius:18px;
-
-}
-
-.live{
-
-display:flex;
-align-items:center;
-gap:8px;
-
-font-size:12px;
-font-weight:700;
-
-color:var(--green);
-
-}
-
-.dot{
-
-width:8px;
-height:8px;
-
-border-radius:50%;
-
-background:var(--green);
-
-box-shadow:0 0 10px var(--green);
-
-animation:pulse 1.4s infinite;
-
-}
-
-@keyframes pulse{
-
-0%,100%{opacity:1;}
-50%{opacity:.3;}
-
-}
-
-/* =======================================================
-MAIN
-======================================================= */
-
-.main{
-
-margin-left:270px;
-
-flex:1;
-
-display:flex;
-flex-direction:column;
-
-}
-
-/* =======================================================
-TOPBAR
-======================================================= */
-
-.topbar{
-
-height:82px;
-
-padding:0 32px;
-
-display:flex;
-align-items:center;
-justify-content:space-between;
-
-border-bottom:1px solid var(--border);
-
-background:rgba(5,5,16,0.72);
-
-backdrop-filter:blur(14px);
-
-position:sticky;
-top:0;
-z-index:50;
-
-}
-
-body.light .topbar{
-
-background:rgba(255,255,255,0.72);
-
-}
-
-.top-left h1{
-
-font-size:22px;
-font-weight:800;
-
-}
-
-.top-left p{
-
-font-size:12px;
-color:var(--muted);
-
-margin-top:3px;
-
-}
-
-.top-right{
-
-display:flex;
-align-items:center;
-gap:16px;
-
-}
-
-.theme-btn{
-
-width:42px;
-height:42px;
-
-border-radius:50%;
-
-border:1px solid var(--border);
-
-background:var(--card);
-
-cursor:pointer;
-
-font-size:18px;
-
-color:var(--text);
-
-}
-
-/* =======================================================
-CONTENT
-======================================================= */
-
-.content{
-
-padding:30px;
-
-}
-
-/* =======================================================
-ADMIN HERO
-======================================================= */
-
-.hero-admin{
-
-background:
-linear-gradient(135deg,
-rgba(245,166,35,0.10),
-rgba(124,58,237,0.08)
-);
-
-border:1px solid var(--border);
-
-border-radius:30px;
-
-padding: 10px 20px;
-
-display:flex;
-justify-content:space-between;
-align-items:center;
-
-overflow:hidden;
-
-position:relative;
-
-margin-bottom:28px;
-
-box-shadow:var(--shadow);
-
-}
-
-.hero-admin::before{
-
-content:'';
-
-position:absolute;
-
-width:420px;
-height:420px;
-
-background:radial-gradient(circle,
-rgba(245,166,35,0.22),
-transparent 70%);
-
-top:-180px;
-right:-120px;
-
-}
-
-.hero-title{
-
-font-size:38px;
-font-weight:900;
-line-height:1.1;
-
-margin-bottom:14px;
-
-}
-
-.hero-title span{
-
-background:linear-gradient(135deg,var(--gold2),var(--gold));
-
--webkit-background-clip:text;
--webkit-text-fill-color:transparent;
-
-}
-
-.hero-desc{
-
-max-width:650px;
-
-font-size:14px;
-line-height:1.8;
-
-color:var(--muted);
-
-}
-
-.hero-actions{
-
-display:flex;
-gap:14px;
-margin-top:24px;
-
-}
-
-.btn-gold{
-
-background:linear-gradient(135deg,var(--gold2),var(--gold));
-
-color:#000;
-
-font-weight:800;
-
-border:none;
-
-border-radius:50px;
-
-padding:14px 30px;
-
-cursor:pointer;
-
-font-size:13px;
-
-letter-spacing:1px;
-
-transition:.3s ease;
-
-}
-
-.btn-gold:hover{
-
-transform:translateY(-3px);
-
-box-shadow:0 12px 30px rgba(245,166,35,0.4);
-
-}
-
-.btn-outline{
-
-background:transparent;
-
-border:1px solid var(--gold);
-
-color:var(--gold);
-
-font-weight:700;
-
-border-radius:50px;
-
-padding:13px 26px;
-
-cursor:pointer;
-
-transition:.3s ease;
-
-}
-
-.btn-outline:hover{
-
-background:var(--gold);
-color:#000;
-
-}
-
-/* =======================================================
-KPI
-======================================================= */
-
-.kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 18px;
-    margin-bottom: 28px;
-}
-
-.kpi {
-    background: var(--bg2);
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 20px;
-    padding: 24px;
-    position: relative;
-    overflow: hidden;
-    transition: .3s ease;
-    min-height: 160px;
-}
-
-.kpi:hover {
-    transform: translateY(-4px);
-    border-color: var(--accent);
-}
-
-.kpi-icon-wrap {
-    width: 46px;
-    height: 46px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 16px;
-    position: relative;
-    z-index: 2;
-}
-
-.kpi-bg-img {
-    position: absolute;
-    right: -5px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 130px;
-    height: 130px;
-    object-fit: contain;
-    opacity: 2;   /* était 0.18, trop faible */
-    z-index: 1;
-    filter: drop-shadow(0 0 12px rgba(255,255,255,0.1));
-}
-
-.kpi-value {
-    font-size: 42px;
-    font-weight: 900;
-    color: var(--gold);
-    line-height: 1;
-    position: relative;
-    z-index: 2;
-    margin-bottom: 6px;
-}
-
-.kpi-label {
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 2px;
-    color: #fff;
-    margin-bottom: 14px;
-    position: relative;
-    z-index: 2;
-}
-
-.kpi-badge {
-    font-size: 11px;
-    color: #22c55e;
-    position: relative;
-    z-index: 2;
-}
-
-.kpi-bar {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    border-radius: 0 0 20px 20px;
-}
-
-/* =======================================================
-WORKFLOW TIMELINE
-======================================================= */
-
-.workflow {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 28px;
-    padding: 28px 32px;
-    margin-bottom: 28px;
-}
-
-.timeline {
-    display: flex;
-    align-items: center;
-    gap: 0;
-}
-
-.step-wrap {
-    display: flex;
-    align-items: center;
-    flex: 1;
-}
-
-.step {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 18px;
-    padding: 20px 14px;
-    text-align: center;
-    transition: .3s ease;
-    flex: 1;
-    height: 180px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-}
-
-.step:hover {
-    transform: translateY(-4px);
-    border-color: rgba(245,166,35,0.4);
-    background: rgba(245,166,35,0.05);
-}
-
-.step-number {
-    width: 44px;
-    height: 44px;
-    min-height: 44px; /* AJOUTEZ */
-    flex-shrink: 0;   /* AJOUTEZ */
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--gold2), var(--gold));
-    color: #000;
-    font-weight: 900;
-    font-size: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 14px;
-}
-
-.step-title {
-    font-size: 13px;
-    font-weight: 800;
-    color: #fff;
-    margin-bottom: 6px;
-}
-
-.step-desc {
-    font-size: 11px;
-    color: var(--muted);
-    line-height: 1.5;
-}
-
-.step-connector {
-    color: var(--gold);
-    font-size: 10px;
-    letter-spacing: 3px;
-    opacity: 0.6;
-    padding: 0 6px;
-    flex-shrink: 0;
-    margin-bottom: 20px; /* aligner avec le milieu des cards */
-}
-body.light .step {
-    background: rgba(0,0,0,0.03);
-    border-color: rgba(0,0,0,0.1);
-}
-
-body.light .step-title {
-    color: var(--text);
-}
-
-/* =======================================================
-CONTROL CENTER
-======================================================= */
-
-.control-grid{
-
-display:grid;
-
-grid-template-columns:2fr 1fr;
-
-gap:22px;
-
-}
-
-.panel{
-
-background:var(--card);
-
-border:1px solid var(--border);
-
-border-radius:28px;
-
-padding:28px;
-
-box-shadow:var(--shadow);
-
-}
-
-.panel-title{
-
-font-size:18px;
-font-weight:800;
-
-margin-bottom:24px;
-
-display:flex;
-align-items:center;
-gap:10px;
-
-}
-
-/* =======================================================
-ROUND CARDS
-======================================================= */
-
-.rounds{
-
-display:grid;
-
-grid-template-columns:repeat(2,1fr);
-
-gap:18px;
-
-}
-
-.round-card{
-
-background:rgba(255,255,255,0.03);
-
-border:1px solid var(--border);
-
-border-radius:24px;
-
-padding:24px;
-
-transition:.3s ease;
-
-position:relative;
-
-overflow:hidden;
-
-}
-
-.round-card:hover{
-
-transform:translateY(-5px);
-
-}
-
-.round-card.active{
-
-border:1px solid var(--gold);
-
-box-shadow:0 0 0 1px rgba(245,166,35,0.18);
-
-}
-
-.round-name{
-
-font-size:14px;
-font-weight:700;
-
-margin-bottom:8px;
-
-}
-
-.round-state{
-
-font-size:11px;
-
-color:var(--muted);
-
-margin-bottom:18px;
-
-}
-
-.progress{
-
-height:10px;
-
-background:rgba(255,255,255,0.08);
-
-border-radius:50px;
-
-overflow:hidden;
-
-margin-bottom:18px;
-
-}
-
-.progress-fill{
-
-height:100%;
-
-background:linear-gradient(90deg,var(--gold2),var(--gold));
-
-width:40%;
-
-border-radius:50px;
-
-}
-
-.round-actions{
-
-display:flex;
-gap:10px;
-
-}
-
-/* =======================================================
-FINALISTS
-======================================================= */
-
-.finalist{
-
-display:flex;
-align-items:center;
-justify-content:space-between;
-
-padding:16px;
-
-border-radius:18px;
-
-background:rgba(245,166,35,0.05);
-
-border:1px solid var(--border);
-
-margin-bottom:12px;
-
-}
-
-.finalist-left{
-
-display:flex;
-align-items:center;
-gap:14px;
-
-}
-
-.avatar{
-
-width:48px;
-height:48px;
-
-border-radius:50%;
-
-background:linear-gradient(135deg,var(--gold2),var(--gold));
-
-display:flex;
-align-items:center;
-justify-content:center;
-
-font-weight:800;
-color:#000;
-
-}
-
-/* =======================================================
-RESPONSIVE
-======================================================= */
-
-@media(max-width:1200px){
-
-.timeline{
-
-grid-template-columns:repeat(3,1fr);
-
-}
-
-.kpi-grid{
-
-grid-template-columns:repeat(2,1fr);
-
-}
-
-.control-grid{
-
-grid-template-columns:1fr;
-
-}
-
-}
-
-@media(max-width:768px){
-
-.sidebar{
-
-display:none;
-
-}
-
-.main{
-
-margin-left:0;
-
-}
-
-.hero-admin{
-
-flex-direction:column;
-align-items:flex-start;
-
-gap:30px;
-
-}
-
-.kpi-grid{
-
-grid-template-columns:1fr;
-
-}
-
-.timeline{
-
-grid-template-columns:1fr;
-
-}
-
-.rounds{
-
-grid-template-columns:1fr;
-
-}
-
-}
-
-</style>
 </head>
 
 <body>
@@ -1089,6 +81,13 @@ CONTROL CENTER • HEM ENGINEERING
 <div class="menu-item" onclick="showSection('stats', this)">
     <div class="menu-icon">📈</div>
     Statistiques
+</div>
+
+<div class="menu-item" onclick="window.location.href='logout.php'" >
+    <div class="menu-icon">➜]</div>
+    Déconnexion
+</div>
+   
 </div>
 
 </div>
@@ -1393,7 +392,7 @@ l’intégralité de la compétition depuis une seule interface.
         <div style="display:flex;flex-direction:column;gap:18px;">
 
             <!-- Card code principal -->
-            <div class="panel" style="background:linear-gradient(145deg,rgba(10,10,30,0.9),rgba(20,10,40,0.8));
+            <div class="panel" style="
                                        border:1px solid rgba(245,166,35,0.3);
                                        position:relative;overflow:hidden;text-align:center;padding:40px 32px;">
 
@@ -1475,7 +474,8 @@ l’intégralité de la compétition depuis une seule interface.
 
             <!-- Compteur participants -->
             <div id="session-nb-wrap" style="display:none;">
-                <div class="panel" style="background:linear-gradient(135deg,rgba(0,255,136,0.08),rgba(5,5,16,0.8));
+                <div class="panel" style="
+
                                            border:1px solid rgba(0,255,136,0.25);
                                            display:flex;align-items:center;gap:20px;padding:24px 28px;
                                            position:relative;overflow:hidden;">
@@ -1512,8 +512,7 @@ l’intégralité de la compétition depuis une seule interface.
         </div>
 
         <!-- PANNEAU PARTICIPANTS LIVE -->
-        <div class="panel" style="background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(5,5,16,0.8));
-                                   border:1px solid rgba(124,58,237,0.35);
+        <div class="panel" style="  
                                    position:relative;overflow:hidden;display:flex;flex-direction:column;">
 
             <!-- Ligne déco top -->
@@ -1795,7 +794,7 @@ l’intégralité de la compétition depuis une seule interface.
         </div>
 
         <!-- Ajouter manuellement -->
-        <div class="panel" style="background:linear-gradient(135deg,rgba(124,58,237,0.08),rgba(5,5,16,0.5));
+        <div class="panel" style="
                                    border:1px solid rgba(124,58,237,0.25);position:relative;overflow:hidden;">
             
             <!-- Étoile décorative -->
@@ -1868,7 +867,7 @@ l’intégralité de la compétition depuis une seule interface.
     </div>
 
     <!-- Liste questions -->
-    <div class="panel" style="background:linear-gradient(135deg,rgba(124,58,237,0.08),rgba(5,5,16,0.5));
+    <div class="panel" style="
                                border:1px solid rgba(124,58,237,0.25);position:relative;overflow:hidden;">
 
         <!-- Étoile déco gauche -->
@@ -1984,7 +983,7 @@ l’intégralité de la compétition depuis une seule interface.
         <div style="display:flex;flex-direction:column;gap:22px;">
 
             <!-- Statut du round -->
-            <div class="panel" style="background:linear-gradient(135deg,rgba(124,58,237,0.15),rgba(5,5,16,0.8));
+            <div class="panel" style="
                                        border:1px solid rgba(124,58,237,0.4);position:relative;overflow:visible;">
                 
                 <!-- Point brillant coin -->
@@ -2049,7 +1048,6 @@ l’intégralité de la compétition depuis une seule interface.
 
             <!-- Question en cours -->
             <div class="panel" id="panel-question" style="display:none;
-                background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(5,5,16,0.8));
                 border:1px solid rgba(124,58,237,0.35);">
 
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
@@ -2123,7 +1121,7 @@ l’intégralité de la compétition depuis une seule interface.
         <div style="display:flex;flex-direction:column;gap:18px;">
 
             <!-- Réponses reçues -->
-            <div class="panel" style="background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(5,5,16,0.8));
+            <div class="panel" style="
                                        border:1px solid rgba(124,58,237,0.35);text-align:center;
                                        position:relative;overflow:visible;">
                 
@@ -2161,7 +1159,7 @@ l’intégralité de la compétition depuis une seule interface.
 
             <!-- Statistiques question -->
             <div class="panel" id="panel-stats-q" style="display:none;
-                background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(5,5,16,0.8));
+                
                 border:1px solid rgba(124,58,237,0.35);">
                 <div style="font-size:15px;font-weight:800;margin-bottom:16px;">📊 Statistiques</div>
                 <div id="stats-choix" style="display:flex;flex-direction:column;gap:10px;"></div>
@@ -2173,7 +1171,7 @@ l’intégralité de la compétition depuis une seule interface.
             </div>
 
             <!-- Top 3 -->
-            <div class="panel" style="background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(5,5,16,0.8));
+            <div class="panel" style="
                                        border:1px solid rgba(124,58,237,0.35);text-align:center;">
 
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
@@ -2217,7 +1215,7 @@ l’intégralité de la compétition depuis une seule interface.
         <div style="display:flex;flex-direction:column;gap:22px;">
 
             <!-- Les 3 Finalistes -->
-            <div class="panel" style="background:linear-gradient(135deg,rgba(124,58,237,0.15),rgba(5,5,16,0.8));
+            <div class="panel" style="
                                        border:1px solid rgba(124,58,237,0.4);position:relative;overflow:visible;">
 
                 <!-- Points brillants -->
@@ -2316,7 +1314,6 @@ l’intégralité de la compétition depuis une seule interface.
 
             <!-- Question en cours finale -->
             <div class="panel" id="panel-question-finale" style="display:none;
-                background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(5,5,16,0.8));
                 border:1px solid rgba(124,58,237,0.35);position:relative;overflow:visible;">
 
                 <div style="position:absolute;top:-4px;right:40px;width:8px;height:8px;
@@ -2394,7 +1391,6 @@ l’intégralité de la compétition depuis une seule interface.
 
             <!-- PODIUM FINAL -->
             <div class="panel" id="panel-podium" style="display:none;
-                background:linear-gradient(135deg,rgba(124,58,237,0.15),rgba(5,5,16,0.8));
                 border:1px solid rgba(124,58,237,0.4);position:relative;overflow:visible;">
 
                 <div style="position:absolute;top:-4px;left:50%;width:8px;height:8px;
@@ -2485,7 +1481,7 @@ l’intégralité de la compétition depuis une seule interface.
         <div style="display:flex;flex-direction:column;gap:18px;">
 
             <!-- Scores finale en direct -->
-            <div class="panel" style="background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(5,5,16,0.8));
+            <div class="panel" style="
                                        border:1px solid rgba(124,58,237,0.35);position:relative;overflow:visible;">
 
                 <div style="position:absolute;top:-4px;right:30px;width:6px;height:6px;
@@ -2512,7 +1508,7 @@ l’intégralité de la compétition depuis une seule interface.
             </div>
 
             <!-- Progression finale -->
-            <div class="panel" style="background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(5,5,16,0.8));
+            <div class="panel" style="
                                        border:1px solid rgba(124,58,237,0.35);">
 
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
@@ -2599,7 +1595,7 @@ l’intégralité de la compétition depuis une seule interface.
     <!-- KPI Stats -->
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:24px;">
 
-        <div style="background:linear-gradient(135deg,rgba(79,70,229,0.15),rgba(5,5,16,0.8));
+        <div style="
                     border:1px solid rgba(79,70,229,0.35);border-radius:20px;padding:24px;
                     text-align:center;position:relative;overflow:visible;transition:.3s;"
              onmouseover="this.style.transform='translateY(-4px)'"
@@ -2619,7 +1615,7 @@ l’intégralité de la compétition depuis une seule interface.
                         letter-spacing:1.5px;margin-top:8px;font-weight:700;">Participants</div>
         </div>
 
-        <div style="background:linear-gradient(135deg,rgba(0,255,136,0.08),rgba(5,5,16,0.8));
+        <div style="
                     border:1px solid rgba(0,255,136,0.25);border-radius:20px;padding:24px;
                     text-align:center;position:relative;overflow:visible;transition:.3s;"
              onmouseover="this.style.transform='translateY(-4px)'"
@@ -2639,7 +1635,7 @@ l’intégralité de la compétition depuis une seule interface.
                         letter-spacing:1.5px;margin-top:8px;font-weight:700;">Réponses totales</div>
         </div>
 
-        <div style="background:linear-gradient(135deg,rgba(124,58,237,0.15),rgba(5,5,16,0.8));
+        <div style="
                     border:1px solid rgba(124,58,237,0.35);border-radius:20px;padding:24px;
                     text-align:center;position:relative;overflow:visible;transition:.3s;"
              onmouseover="this.style.transform='translateY(-4px)'"
@@ -2659,7 +1655,7 @@ l’intégralité de la compétition depuis une seule interface.
                         letter-spacing:1.5px;margin-top:8px;font-weight:700;">Taux de réussite</div>
         </div>
 
-        <div style="background:linear-gradient(135deg,rgba(245,166,35,0.12),rgba(5,5,16,0.8));
+        <div style="
                     border:1px solid rgba(245,166,35,0.3);border-radius:20px;padding:24px;
                     text-align:center;position:relative;overflow:visible;transition:.3s;"
              onmouseover="this.style.transform='translateY(-4px)'"
@@ -2684,7 +1680,7 @@ l’intégralité de la compétition depuis une seule interface.
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:22px;">
 
         <!-- CLASSEMENT COMPLET -->
-        <div class="panel" style="background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(5,5,16,0.8));
+        <div class="panel" style="
                                    border:1px solid rgba(124,58,237,0.35);position:relative;overflow:visible;">
 
             <div style="position:absolute;top:-4px;left:40px;width:8px;height:8px;
@@ -2756,7 +1752,7 @@ l’intégralité de la compétition depuis une seule interface.
         <div style="display:flex;flex-direction:column;gap:18px;">
 
             <!-- Stats par groupe -->
-            <div class="panel" style="background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(5,5,16,0.8));
+            <div class="panel" style="
                                        border:1px solid rgba(124,58,237,0.35);position:relative;overflow:visible;">
 
                 <div style="position:absolute;top:-4px;right:30px;width:6px;height:6px;
@@ -2839,7 +1835,7 @@ l’intégralité de la compétition depuis une seule interface.
             </div>
 
             <!-- Stats par question -->
-            <div class="panel" style="background:linear-gradient(135deg,rgba(124,58,237,0.12),rgba(5,5,16,0.8));
+            <div class="panel" style="
                                        border:1px solid rgba(124,58,237,0.35);position:relative;overflow:visible;">
 
                 <div style="position:absolute;bottom:-4px;left:30px;width:6px;height:6px;
@@ -3090,6 +2086,190 @@ function lancerTirage() {
     });
 }
 
+function lancerQuestionDepartage(p1, p2) {
+    if (!sessionCourante || !sessionCourante.id) {
+        alert('❌ Aucune session active !');
+        return;
+    }
+    
+    if (!confirm(`⚔️ LANCER LE DÉPARTAGE ?\n\n${p1.nom} VS ${p2.nom}\n\nUne seule question les départagera !`)) return;
+
+    fetch('../api/departage.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'lancer',
+            session_id: sessionCourante.id,
+            participants: [p1, p2]
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            // Afficher la question de départage dans l'interface admin
+            afficherQuestionDepartage(data.question, data.participants);
+        } else {
+            alert('❌ ' + (data.error || 'Erreur inconnue'));
+        }
+    });
+}
+
+function afficherQuestionDepartage(question, participants) {
+    // Créer/montrer une zone spéciale pour le départage
+    const panelDepartage = document.getElementById('panel-departage');
+    if (!panelDepartage) {
+        // Créer le panneau s'il n'existe pas
+        const div = document.createElement('div');
+        div.id = 'panel-departage';
+        div.className = 'panel';
+        div.style.cssText = `
+            background:linear-gradient(135deg,rgba(255,75,75,0.1),rgba(245,166,35,0.05));
+            border:2px solid var(--gold);
+            margin-bottom:24px;
+            padding:24px;
+            text-align:center;
+        `;
+        document.querySelector('#section-rounds .panel').after(div);
+    }
+    
+    const panel = document.getElementById('panel-departage');
+    panel.style.display = 'block';
+    panel.innerHTML = `
+        <div style="font-size:36px;margin-bottom:12px;">⚔️</div>
+        <div style="font-size:20px;font-weight:900;color:var(--gold);margin-bottom:8px;">
+            QUESTION DE DÉPARTAGE
+        </div>
+        <div style="font-size:16px;color:var(--muted);margin-bottom:20px;">
+            ${participants[0].nom} VS ${participants[1].nom}
+        </div>
+        <div style="font-size:18px;font-weight:700;margin-bottom:24px;
+                    padding:20px;background:rgba(245,166,35,0.06);
+                    border:1px solid rgba(245,166,35,0.2);border-radius:16px;">
+            ${question.texte}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px;">
+            ${[question.choix_1, question.choix_2, question.choix_3, question.choix_4].map((c, i) => `
+                <div style="background:rgba(255,255,255,0.05);border:1px solid var(--border);
+                            border-radius:12px;padding:14px;">
+                    <span style="color:var(--gold);font-weight:800;">${i+1}.</span> ${c}
+                </div>
+            `).join('')}
+        </div>
+        <div style="display:flex;gap:12px;">
+            <button onclick="topChronoDepartage(${question.id})"
+                style="background:linear-gradient(135deg,#00FF88,#00cc66);
+                       color:#000;font-weight:800;border:none;border-radius:50px;
+                       padding:14px 28px;font-size:13px;cursor:pointer;flex:1;">
+                ⏱ TOP CHRONO
+            </button>
+            <button onclick="annulerDepartage()"
+                style="background:rgba(255,75,75,0.1);border:1px solid rgba(255,75,75,0.2);
+                       color:var(--red);border-radius:50px;
+                       padding:14px 28px;font-size:13px;cursor:pointer;flex:1;">
+                ❌ Annuler
+            </button>
+        </div>
+    `;
+}
+
+function annulerDepartage() {
+    document.getElementById('panel-departage').style.display = 'none';
+}
+function topChronoDepartage(questionId) {
+    console.log('⏱ TOP CHRONO DÉPARTAGE - Question', questionId);
+    
+    // 1. Créer un round spécial "departage" pour que les participants voient la question
+    fetch('../api/session.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'demarrer_round_unifie',
+            round: 'departage',
+            question_id: questionId,
+            session_id: sessionCourante.id
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        console.log('Round départage créé:', data);
+        
+        // 2. Lancer le chrono
+        fetch('../api/departage.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'top_chrono',
+                question_id: questionId
+            })
+        });
+        
+        // 3. Chrono visuel
+        let temps = 10;
+        const boutons = document.querySelectorAll('#panel-departage button');
+        boutons.forEach(b => b.style.display = 'none');
+        
+        let chronoDiv = document.getElementById('chrono-departage');
+        if (!chronoDiv) {
+            chronoDiv = document.createElement('div');
+            chronoDiv.id = 'chrono-departage';
+            chronoDiv.style.cssText = `
+                font-size:48px;font-weight:900;color:var(--gold);
+                text-align:center;margin:20px 0;
+            `;
+            document.querySelector('#panel-departage').appendChild(chronoDiv);
+        }
+        
+        const interval = setInterval(() => {
+            temps--;
+            chronoDiv.textContent = temps;
+            if (temps <= 3) chronoDiv.style.color = 'var(--red)';
+            else if (temps <= 5) chronoDiv.style.color = '#FF9500';
+            
+            if (temps <= 0) {
+                clearInterval(interval);
+                chronoDiv.textContent = '⏰';
+                setTimeout(() => verifierResultatDepartage(questionId), 2000);
+            }
+        }, 1000);
+    });
+}
+
+function verifierResultatDepartage(questionId) {
+    const participants = window.exaequoRound 
+        ? [window.exaequoRound.participant1, window.exaequoRound.participant2]
+        : [];
+    
+    const participantIds = participants.map(p => p.id);
+    
+    fetch('../api/departage.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'verifier',
+            question_id: questionId,
+            participant_ids: participantIds
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.termine && data.gagnant) {
+            alert(`🏆 VAINQUEUR DU DÉPARTAGE : ${data.gagnant.nom} !\n\n` +
+                  `Raison : ${data.raison === 'temps' ? 'Plus rapide' : 'Bonne réponse'}`);
+            
+            // Mettre à jour le finaliste
+            document.getElementById('finaliste-' + roundActuel + '-nom').textContent = data.gagnant.nom;
+            document.getElementById('finaliste-' + roundActuel + '-pts').textContent = participants.find(p => p.id == data.gagnant.participant_id).total_points + ' pts';
+            
+            // Masquer le panneau de départage
+            annulerDepartage();
+            
+        } else if (data.termine && !data.gagnant) {
+            alert('❌ Aucun gagnant. Les deux participants n\'ont pas trouvé la bonne réponse.\n\nLancez une nouvelle question de départage.');
+        } else {
+            alert('⏳ En attente des réponses des participants...');
+        }
+    });
+}
 
 function supprimerParticipant(id) {
     if (!confirm('Supprimer ce participant ?')) return;
@@ -3315,35 +2495,70 @@ function selectionnerRound(num) {
 let nbParticipantsRound = 0;
 
 function demarrerRound() {
+    const element = document.getElementById('count-questions');
+
+    if (!element) {
+        console.error("Élément #count-questions introuvable !");
+        return;
+    }
+
+    const texteBrut = element.textContent || "(0)";
+    const nbQuestionsDispo = parseInt(texteBrut.replace(/[()]/g, ''), 10);
+
+    
+
+    if (!nbQuestionsDispo || nbQuestionsDispo === 0) {
+        alert("Action impossible : Il n'y a aucune question chargée pour ce round !");
+        return;
+    }
+
     if (!confirm('Démarrer First Round ' + roundActuel + ' ?')) return;
 
-    // Récupérer le nombre de participants du groupe
+    // Premier fetch pour compter (Optionnel si session.php le fait déjà, mais gardons-le)
     fetch('../api/participant.php?action=count_groupe&groupe_id=' + roundActuel)
     .then(r => r.json())
     .then(d => { nbParticipantsRound = d.count || 0; });
 
+    // LE FETCH À MODIFIER
     fetch('../api/session.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'demarrer_round_unifie', round: roundActuel })
     })
-    .then(r => r.json())
+    .then(async response => {
+        // Au lieu de faire .json() direct, on récupère le texte brut
+        const text = await response.text();
+        
+        try {
+            // On essaie de transformer le texte en JSON manuellement
+            return JSON.parse(text);
+        } catch (err) {
+            // SI ÇA PLANTE : On affiche le texte brut dans la console pour voir l'erreur PHP
+            console.error("ERREUR DE PARSING JSON ! Contenu reçu du serveur :");
+            console.log(text); 
+            throw new Error("Le serveur a renvoyé du texte au lieu de JSON. Regarde la console (F12).");
+        }
+    })
     .then(data => {
-    if (data.success) {
-        nbParticipantsRound = data.nb_participants || 0;
-        document.getElementById('nb-participants-round').textContent = nbParticipantsRound;
-        questionsRound = data.questions || [];
-        questionIndex = 0;
-        document.getElementById('round-badge').textContent = '▶ En cours';
-        document.getElementById('round-badge').style.color = 'var(--green)';
-        document.getElementById('btn-demarrer').style.display = 'none';
-        afficherQuestion();
-    } else {
-        alert('Erreur : ' + (data.error || JSON.stringify(data)));
-    }
-});
-
+        if (data.success) {
+            nbParticipantsRound = data.nb_participants || 0;
+            document.getElementById('nb-participants-round').textContent = nbParticipantsRound;
+            questionsRound = data.questions || [];
+            questionIndex = 0;
+            document.getElementById('round-badge').textContent = '▶ En cours';
+            document.getElementById('round-badge').style.color = 'var(--green)';
+            document.getElementById('btn-demarrer').style.display = 'none';
+            afficherQuestion();
+        } else {
+            alert('Erreur : ' + (data.error || JSON.stringify(data)));
+        }
+    })
+    .catch(error => {
+        console.error("Erreur globale :", error);
+        alert(error.message);
+    });
 }
+
 
 // =========================
 // AFFICHER LA QUESTION
@@ -3353,6 +2568,7 @@ function afficherQuestion() {
         finRound();
         return;
     }
+
 
     const q = questionsRound[questionIndex];
     const total = questionsRound.length;
@@ -3395,33 +2611,29 @@ function afficherQuestion() {
 // TOP CHRONO
 // =========================
 function topChrono() {
+    if (chronoInterval) { clearInterval(chronoInterval); chronoInterval = null; }
     chronoEnCours = true;
     let temps = 10;
     const el = document.getElementById('chrono-num');
     const box = document.getElementById('chrono-admin');
-
+    el.textContent = temps;
+    box.style.borderColor = 'var(--gold)';
+    box.style.color = 'var(--gold)';
     document.getElementById('btn-top-chrono').style.display = 'none';
     document.getElementById('btn-stop-chrono').style.display = 'block';
-
-    // Notifier le backend que le chrono démarre
     fetch('../api/session.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'top_chrono', question_id: questionsRound[questionIndex].id })
     });
-
     chronoInterval = setInterval(() => {
         temps--;
+        if (temps < 0) { clearInterval(chronoInterval); chronoInterval = null; return; }
         el.textContent = temps;
-
-        if (temps <= 3) {
-            box.style.borderColor = 'var(--red)';
-            box.style.color = 'var(--red)';
-        }
-
-        if (temps <= 0) {
-            clearInterval(chronoInterval);
-            chronoEnCours = false;
+        if (temps <= 3) { box.style.borderColor = 'var(--red)'; box.style.color = 'var(--red)'; }
+        else if (temps <= 5) { box.style.borderColor = '#FF9500'; box.style.color = '#FF9500'; }
+        if (temps === 0) {
+            clearInterval(chronoInterval); chronoInterval = null; chronoEnCours = false;
             document.getElementById('btn-stop-chrono').style.display = 'none';
             document.getElementById('btn-afficher-stats').style.display = 'block';
             document.getElementById('btn-suivante').style.display = 'block';
@@ -3544,29 +2756,31 @@ for (let s = 1; s <= 5; s++) {
 // TOP CHRONO FINALE
 // =========================
 function topChronoFinale() {
+    if (chronoFinaleInterval) { clearInterval(chronoFinaleInterval); chronoFinaleInterval = null; }
     let temps = 10;
-    const el  = document.getElementById('chrono-finale-num');
+    const el = document.getElementById('chrono-finale-num');
     const box = document.getElementById('chrono-finale');
-
+    el.textContent = temps;
+    box.style.borderColor = 'var(--gold)';
+    box.style.color = 'var(--gold)';
     document.getElementById('btn-top-finale').style.display = 'none';
     document.getElementById('btn-stop-finale').style.display = 'block';
-
-    // ← AJOUTER : notifier le backend que le chrono démarre
     fetch('../api/session.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'top_chrono' })
+        body: JSON.stringify({ 
+            action: 'top_chrono', 
+            question_id: questionsFinale[questionFinaleIndex].id  // AJOUT
+        })
     });
-
     chronoFinaleInterval = setInterval(() => {
         temps--;
+        if (temps < 0) { clearInterval(chronoFinaleInterval); chronoFinaleInterval = null; return; }
         el.textContent = temps;
-        if (temps <= 3) {
-            box.style.borderColor = 'var(--red)';
-            box.style.color = 'var(--red)';
-        }
-        if (temps <= 0) {
-            clearInterval(chronoFinaleInterval);
+        if (temps <= 3) { box.style.borderColor = 'var(--red)'; box.style.color = 'var(--red)'; }
+        else if (temps <= 5) { box.style.borderColor = '#FF9500'; box.style.color = '#FF9500'; }
+        if (temps === 0) {
+            clearInterval(chronoFinaleInterval); chronoFinaleInterval = null;
             document.getElementById('btn-stop-finale').style.display = 'none';
             document.getElementById('btn-stats-finale').style.display = 'block';
             document.getElementById('btn-suivante-finale').style.display = 'block';
@@ -3967,6 +3181,7 @@ function demarrerSession() {
 // =========================
 function stopChrono() {
     clearInterval(chronoInterval);
+    chronoInterval = null;
     chronoEnCours = false;
     document.getElementById('btn-stop-chrono').style.display = 'none';
     document.getElementById('btn-afficher-stats').style.display = 'block';
@@ -4021,50 +3236,8 @@ function questionSuivante() {
     });
 }
 
-// =========================
-// FIN DU ROUND
-// =========================
-function finRound() {
-    document.getElementById('panel-question').style.display = 'none';
-    document.getElementById('round-badge').textContent = '✅ Terminé';
-    document.getElementById('round-badge').style.color = 'var(--green)';
-    document.getElementById('btn-demarrer').disabled = true;
-    document.getElementById('btn-demarrer').style.opacity = '0.5';
-    document.getElementById('btn-demarrer').innerHTML = '✅ &nbsp;Round terminé';
 
-    // Charger le meilleur du round
-    fetch('../api/participant.php?action=meilleur_round&groupe_id=' + roundActuel)
-    .then(r => r.json())
-    .then(data => {
-        if (data.participant) {
-            const p = data.participant;
-            const medals = ['🥇', '🥈', '🥉'];
-            const couleurs = ['var(--gold)', '#A78BFA', '#38BDF8'];
-            const n = roundActuel;
 
-            // Mettre à jour le top 3
-            document.getElementById('top3-list').innerHTML = `
-                <div style="display:flex;align-items:center;gap:12px;
-                            padding:16px;border-radius:16px;
-                            background:rgba(245,166,35,0.06);
-                            border:1px solid rgba(245,166,35,0.2);">
-                    <span style="font-size:24px;">${medals[n-1] || '🏅'}</span>
-                    <div style="flex:1;">
-                        <div style="font-weight:800;font-size:15px;">${p.nom}</div>
-                        <div style="font-size:11px;color:var(--muted);">First Round ${n}</div>
-                    </div>
-                    <div style="font-weight:900;color:${couleurs[n-1]};font-size:16px;">
-                        ${p.total_points} pts
-                    </div>
-                </div>
-            `;
-
-            // Mettre à jour les finalistes dans la section finale
-            document.getElementById('finaliste-' + n + '-nom').textContent = p.nom;
-            document.getElementById('finaliste-' + n + '-pts').textContent = p.total_points + ' pts';
-        }
-    });
-}
 
 // =========================
 // POLLING RÉPONSES
@@ -4090,12 +3263,12 @@ function startPollingReponses(questionId) {
         });
     }, 2000);
 }
-
-
 // =========================
-// TOP 3 EN DIRECT
+// FIN DU ROUND (VERSION UNIQUE)
 // =========================
 function finRound() {
+    console.log('🏁 finRound() appelée - Round', roundActuel);
+    
     document.getElementById('panel-question').style.display = 'none';
     document.getElementById('round-badge').textContent = '✅ Terminé';
     document.getElementById('round-badge').style.color = 'var(--green)';
@@ -4105,11 +3278,15 @@ function finRound() {
 
     // Charger le top 3 du round avec filtre session + groupe
     const sessionId = sessionCourante ? sessionCourante.id : '';
+    console.log('Session ID utilisé:', sessionId);
 
     fetch(`../api/classement.php?groupe_id=${roundActuel}&session_id=${sessionId}`)
     .then(r => r.json())
     .then(data => {
+        console.log('📊 Données classement reçues:', data);
+        
         if (!Array.isArray(data) || data.length === 0) {
+            console.log('❌ Aucune donnée de classement');
             document.getElementById('top3-list').innerHTML = `
                 <div style="text-align:center;padding:20px;color:var(--muted);">
                     Aucun score disponible.
@@ -4117,6 +3294,41 @@ function finRound() {
             return;
         }
 
+        // Afficher chaque participant dans la console
+        data.forEach((p, i) => {
+            console.log(`#${i+1}: ${p.nom} - ${p.total_points} pts`);
+        });
+
+        // === DÉTECTION EX-AEQUO ===
+        const premier = data[0];
+        const deuxieme = data[1];
+        
+        console.log('Premier:', premier);
+        console.log('Deuxième:', deuxieme);
+        
+        if (premier && deuxieme) {
+            console.log(`🔍 Comparaison: ${premier.total_points} === ${deuxieme.total_points} ?`);
+            
+            if (premier.total_points === deuxieme.total_points) {
+    console.log('⚠️⚠️⚠️ EX-AEQUO DÉTECTÉ ! ⚠️⚠️⚠️');
+    
+    // Stocker les infos pour le départage
+    window.exaequoRound = {
+        round: roundActuel,
+        participant1: premier,
+        participant2: deuxieme
+    };
+    
+    // Lancer automatiquement le départage
+    lancerQuestionDepartage(premier, deuxieme);
+} else {
+                console.log('✅ Pas d\'ex-aequo');
+            }
+        } else {
+            console.log('❌ Pas assez de participants pour comparer (moins de 2)');
+        }
+
+        // === AFFICHAGE TOP 3 ===
         const medals  = ['🥇', '🥈', '🥉'];
         const couleurs = ['var(--gold)', '#A78BFA', '#38BDF8'];
 
@@ -4141,7 +3353,11 @@ function finRound() {
         if (data[0]) {
             document.getElementById('finaliste-' + roundActuel + '-nom').textContent = data[0].nom;
             document.getElementById('finaliste-' + roundActuel + '-pts').textContent = data[0].total_points + ' pts';
+            console.log('✅ Finaliste mis à jour:', data[0].nom);
         }
+    })
+    .catch(error => {
+        console.error('❌ Erreur lors du chargement du classement:', error);
     });
 }
 

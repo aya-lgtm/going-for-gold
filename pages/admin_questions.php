@@ -1,4 +1,14 @@
 <?php
+session_start();
+
+// Si la variable de session n'est pas définie, on dégage l'intrus
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    header('Location: login.php');
+    exit();
+}
+?>
+
+<?php
 require_once __DIR__ . '/../includes/functions.php';
 
 // SUPPRIMER
