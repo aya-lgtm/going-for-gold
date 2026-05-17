@@ -18,7 +18,10 @@ if (empty($action)) {
 if ($action === 'status') {
 
     $participant_id = $_GET['participant_id'] ?? 0;
-
+    if ($participant_id > 0) {
+        $pdo->prepare("UPDATE participants SET last_activity = NOW() WHERE id = ?")
+            ->execute([$participant_id]);
+    }
     $stmt = $pdo->prepare("
         SELECT p.*, g.nom as groupe_nom
         FROM participants p
@@ -33,6 +36,9 @@ if ($action === 'status') {
         exit;
     }
 
+    $pdo->exec("DELETE FROM participants WHERE last_activity < DATE_SUB(NOW(), INTERVAL 1 MINUTE)");
+
+
     $stmt_nb = $pdo->prepare("
         SELECT COUNT(*) FROM participants 
         WHERE session_id = ?
@@ -40,61 +46,68 @@ if ($action === 'status') {
     $stmt_nb->execute([$participant['session_id']]);
     $nb = $stmt_nb->fetchColumn();
 
-    $groupe_id = $participant['groupe_id'];
+        $groupe_id = $participant['groupe_id'];
 
     // Chercher d'abord si une finale est en cours
-$stmt_finale = $pdo->prepare("
-SELECT * FROM sessions_quiz
-WHERE statut = 'en_cours'
-AND type_round = 'finale'
-ORDER BY id DESC LIMIT 1
-");
-$stmt_finale->execute();
-$session_finale = $stmt_finale->fetch(PDO::FETCH_ASSOC);
-
-if ($session_finale) {
-// ✅ Vérifier que CE participant est bien 1er de son groupe
-$stmt_check = $pdo->prepare("
-    SELECT COUNT(*) FROM (
-        SELECT p2.id,
-               RANK() OVER (
-                   PARTITION BY p2.groupe_id
-                   ORDER BY COALESCE(s2.total_points, 0) DESC
-               ) AS rang
-        FROM participants p2
-        LEFT JOIN scores s2 ON s2.participant_id = p2.id
-        WHERE p2.session_id = ?
-    ) ranked
-    WHERE ranked.id = ? AND ranked.rang = 1
-");
-$stmt_check->execute([$participant['session_id'], $participant_id]);
-$est_finaliste = $stmt_check->fetchColumn() > 0;
-
-if ($est_finaliste) {
-    $session = $session_finale;
-} else {
-    // Non finaliste — chercher son round normal
-    $type_round = 'first_round_' . $groupe_id;
-    $stmt_session = $pdo->prepare("
+    $stmt_finale = $pdo->prepare("
         SELECT * FROM sessions_quiz
-        WHERE type_round = ?
+        WHERE statut = 'en_cours'
+        AND type_round = 'finale'
         ORDER BY id DESC LIMIT 1
     ");
-    $stmt_session->execute([$type_round]);
-    $session = null; // son round est terminé
-}
-} else {
-// Pas de finale — chercher le round du groupe
-$type_round = 'first_round_' . $groupe_id;
-$stmt_session = $pdo->prepare("
-    SELECT * FROM sessions_quiz
-    WHERE statut = 'en_cours'
-    AND type_round = ?
-    ORDER BY id DESC LIMIT 1
-");
-$stmt_session->execute([$type_round]);
-$session = $stmt_session->fetch(PDO::FETCH_ASSOC);
-}
+    $stmt_finale->execute();
+    $session_finale = $stmt_finale->fetch(PDO::FETCH_ASSOC);
+
+    if ($participant_id > 0) {
+        $stmt_upd = $pdo->prepare("UPDATE participants SET last_activity = NOW() WHERE id = ?");
+        $stmt_upd->execute([$participant_id]);
+    }
+
+    if ($session_finale) {
+        // Vérifier que CE participant est bien finaliste
+        $stmt_check = $pdo->prepare("
+            SELECT COUNT(*) FROM (
+                SELECT p2.id,
+                       COALESCE(s2.total_points, 0) as pts,
+                       MAX(COALESCE(s2.total_points, 0)) OVER (PARTITION BY p2.groupe_id) as max_pts
+                FROM participants p2
+                LEFT JOIN scores s2 ON s2.participant_id = p2.id
+                WHERE p2.session_id = ? AND p2.groupe_id = ?
+            ) t
+            WHERE t.id = ? AND t.pts = t.max_pts
+        ");
+        $stmt_check->execute([$participant['session_id'], $groupe_id, $participant_id]);
+        $est_finaliste = $stmt_check->fetchColumn() > 0;
+
+        if ($est_finaliste) {
+            $session = $session_finale;
+        } else {
+            $session = null;
+        }
+    } else {
+        // Pas de finale — chercher le round du groupe
+        $type_round = 'first_round_' . $groupe_id;
+        $stmt_session = $pdo->prepare("
+            SELECT * FROM sessions_quiz
+            WHERE statut = 'en_cours'
+            AND type_round = ?
+            ORDER BY id DESC LIMIT 1
+        ");
+        $stmt_session->execute([$type_round]);
+        $session = $stmt_session->fetch(PDO::FETCH_ASSOC);
+
+        // 🔥 Si pas de round normal, chercher un round de départage
+        if (!$session) {
+            $stmt_dep = $pdo->prepare("
+                SELECT * FROM sessions_quiz
+                WHERE statut = 'en_cours'
+                AND type_round = 'departage'
+                ORDER BY id DESC LIMIT 1
+            ");
+            $stmt_dep->execute();
+            $session = $stmt_dep->fetch(PDO::FETCH_ASSOC);
+        }
+    }
 
     if (!$session) {
         echo json_encode([
@@ -117,10 +130,19 @@ $session = $stmt_session->fetch(PDO::FETCH_ASSOC);
     $questions = json_decode($session['questions_ids'] ?? '[]', true);
     $index     = (int)($session['question_actuelle'] ?? 0);
 
-    if (!$questions || $index >= count($questions)) {
+   if (!$questions || $index >= count($questions)) {
+    // Si c'était un départage, renvoyer vers l'écran de fin normal
+    if ($session['type_round'] === 'departage') {
+        echo json_encode([
+            'session_phase' => 'attente',
+            'nb_participants' => (int)$nb,
+            'groupe_nom' => $participant['groupe_nom']
+        ]);
+    } else {
         echo json_encode(['session_phase' => 'termine', 'score_total' => 0]);
-        exit;
     }
+    exit;
+}
 
     $qid  = $questions[$index];
     $stmt = $pdo->prepare("SELECT * FROM questions WHERE id = ?");
@@ -149,62 +171,87 @@ elseif ($action === 'repondre') {
     $participant_id = $data['participant_id'] ?? 0;
     $question_id    = $data['question_id']    ?? 0;
     $reponse        = $data['reponse']        ?? 0;
-    $temps_reponse  = $data['temps_reponse']  ?? 10;
+    $temps_reponse  = (float)($data['temps_reponse'] ?? 10);
 
-    // Vérifier si déjà répondu
-    $check = $pdo->prepare("
-        SELECT id FROM reponses
-        WHERE participant_id = ? AND question_id = ?
-    ");
+    // 1. Sécurité : Vérifier l'ID
+    if ($participant_id <= 0) {
+        echo json_encode(['success' => false, 'error' => 'ID Participant manquant']);
+        exit;
+    }
+
+    // 2. Mise à jour de l'activité
+    $pdo->prepare("UPDATE participants SET last_activity = NOW() WHERE id = ?")
+        ->execute([$participant_id]);
+
+    // 3. Vérifier si déjà répondu
+    $check = $pdo->prepare("SELECT id FROM reponses WHERE participant_id = ? AND question_id = ?");
     $check->execute([$participant_id, $question_id]);
     if ($check->fetch()) {
         echo json_encode(['success' => false, 'error' => 'Déjà répondu']);
         exit;
     }
 
-    // Récupérer la bonne réponse
+    // 4. Récupérer la bonne réponse
     $stmt = $pdo->prepare("SELECT bonne_reponse FROM questions WHERE id = ?");
     $stmt->execute([$question_id]);
     $q = $stmt->fetch(PDO::FETCH_ASSOC);
 
+    if (!$q) {
+        echo json_encode(['success' => false, 'error' => 'Question introuvable']);
+        exit;
+    }
+
+    // 5. Calcul des points
     $correct = ((int)$reponse === (int)$q['bonne_reponse']);
+    // Formule : 1000 pts max, -90 par seconde, minimum 100 si juste
+    $points = $correct ? max(100, round(1000 - ($temps_reponse * 90))) : 0;
 
-    $points = 0;
-    if ($correct) {
-        $points = max(100, round(1000 - ($temps_reponse * 90)));
-    }
-
-    // Enregistrer la réponse
-    $stmt = $pdo->prepare("
-    INSERT INTO reponses (participant_id, question_id, reponse_donnee, points_obtenus, temps_reponse, created_at)
-    VALUES (?, ?, ?, ?, ?, NOW())
-");
-$stmt->execute([$participant_id, $question_id, $reponse, $points, $temps_reponse]);
-
-    // Vérifier si c'est une question de la finale
-    $stmt_finale = $pdo->prepare("
-        SELECT COUNT(*) FROM sessions_quiz
-        WHERE type_round = 'finale'
-        AND JSON_CONTAINS(questions_ids, CAST(? AS JSON))
-    ");
-    $stmt_finale->execute([$question_id]);
-    $est_question_finale = $stmt_finale->fetchColumn() > 0;
-
-    // Mettre à jour scores uniquement si ce n'est PAS la finale
-    if (!$est_question_finale) {
-        $stmt_score = $pdo->prepare("
-            INSERT INTO scores (participant_id, total_points)
-            VALUES (?, ?)
-            ON DUPLICATE KEY UPDATE total_points = total_points + ?
+    // 6. Insertion de la réponse avec capture d'erreur
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO reponses (participant_id, question_id, reponse_donnee, points_obtenus, temps_reponse, created_at)
+            VALUES (?, ?, ?, ?, ?, NOW())
         ");
-        $stmt_score->execute([$participant_id, $points, $points]);
+        $stmt->execute([$participant_id, $question_id, (int)$reponse, (int)$points, $temps_reponse]);
+    } catch (PDOException $e) {
+        echo json_encode(['success' => false, 'error' => 'Erreur SQL Reponse : ' . $e->getMessage()]);
+        exit;
     }
 
+    // 7. Vérifier si c'est une question de finale (via PHP pour éviter l'erreur 1064)
+    $stmt_finale = $pdo->prepare("SELECT questions_ids FROM sessions_quiz WHERE type_round = 'finale' ORDER BY id DESC LIMIT 1");
+    $stmt_finale->execute();
+    $res_finale = $stmt_finale->fetch(PDO::FETCH_ASSOC);
+
+    $est_question_finale = false;
+    if ($res_finale) {
+        $ids_finale = json_decode($res_finale['questions_ids'], true) ?: [];
+        if (in_array($question_id, $ids_finale)) {
+            $est_question_finale = true;
+        }
+    }
+
+    // 8. Mettre à jour la table 'scores' (uniquement si ce n'est PAS la finale)
+    if (!$est_question_finale) {
+        try {
+            $stmt_score = $pdo->prepare("
+                INSERT INTO scores (participant_id, total_points)
+                VALUES (?, ?)
+                ON DUPLICATE KEY UPDATE total_points = total_points + ?
+            ");
+            $stmt_score->execute([$participant_id, (int)$points, (int)$points]);
+        } catch (PDOException $e) {
+            echo json_encode(['success' => false, 'error' => 'Erreur SQL Score : ' . $e->getMessage()]);
+            exit;
+        }
+    }
+
+    // 9. Succès
     echo json_encode([
         'success'       => true,
         'correct'       => $correct,
         'bonne_reponse' => (int)$q['bonne_reponse'],
-        'points'        => $points
+        'points'        => (int)$points
     ]);
     exit;
 }
@@ -234,21 +281,19 @@ $session_finale = $stmt_finale->fetch(PDO::FETCH_ASSOC);
 $session = null;
 
 if ($session_finale) {
-// ✅ Vérifier que CE participant est bien finaliste
+// Vérifier que CE participant est bien finaliste (meilleur de son groupe)
 $stmt_check = $pdo->prepare("
     SELECT COUNT(*) FROM (
         SELECT p2.id,
-               RANK() OVER (
-                   PARTITION BY p2.groupe_id
-                   ORDER BY COALESCE(s2.total_points, 0) DESC
-               ) AS rang
+               COALESCE(s2.total_points, 0) as pts,
+               MAX(COALESCE(s2.total_points, 0)) OVER (PARTITION BY p2.groupe_id) as max_pts
         FROM participants p2
         LEFT JOIN scores s2 ON s2.participant_id = p2.id
-        WHERE p2.session_id = ?
-    ) ranked
-    WHERE ranked.id = ? AND ranked.rang = 1
+        WHERE p2.session_id = ? AND p2.groupe_id = ?
+    ) t
+    WHERE t.id = ? AND t.pts = t.max_pts
 ");
-$stmt_check->execute([$session_id, $participant_id]);
+$stmt_check->execute([$session_id, $groupe_id, $participant_id]);
 $est_finaliste = $stmt_check->fetchColumn() > 0;
 
 if ($est_finaliste) {
@@ -267,6 +312,16 @@ $stmt_s = $pdo->prepare("
 ");
 $stmt_s->execute([$type_round]);
 $session = $stmt_s->fetch(PDO::FETCH_ASSOC);
+// Si toujours pas de session, chercher un départage
+if (!$session) {
+    $stmt_dep = $pdo->prepare("
+        SELECT * FROM sessions_quiz
+        WHERE statut = 'en_cours' AND type_round = 'departage'
+        ORDER BY id DESC LIMIT 1
+    ");
+    $stmt_dep->execute();
+    $session = $stmt_dep->fetch(PDO::FETCH_ASSOC);
+}
 }
 
     // Déterminer si c'est la finale
@@ -335,7 +390,18 @@ $session = $stmt_s->fetch(PDO::FETCH_ASSOC);
 
     if (!$qid) {
         if ($est_finale) {
-            // Score uniquement des questions de la finale
+            // En finale : ne declarer "fin" que si la session est vraiment terminee en base
+            $stmt_statut = $pdo->prepare("SELECT statut FROM sessions_quiz WHERE id = ?");
+            $stmt_statut->execute([$session['id']]);
+            $statut_session = $stmt_statut->fetchColumn();
+
+            if ($statut_session !== 'termine') {
+                // La question_actuelle depasse le tableau temporairement entre 2 questions
+                // On attend que l'admin valide la fin officielle
+                echo json_encode(['phase' => 'attente_suivante', 'score_total' => 0, 'mon_rang' => 0]);
+                exit;
+            }
+
             $placeholders = implode(',', array_fill(0, count($questions), '?'));
             $stmt = $pdo->prepare("
                 SELECT COALESCE(SUM(points_obtenus), 0) 
@@ -346,7 +412,6 @@ $session = $stmt_s->fetch(PDO::FETCH_ASSOC);
             $stmt->execute(array_merge([$participant_id], $questions));
             $score = $stmt->fetchColumn();
 
-            // Rang finale
             $stmt_rang = $pdo->prepare("
                 SELECT COUNT(*) + 1 FROM (
                     SELECT r.participant_id, SUM(r.points_obtenus) as total
@@ -383,6 +448,7 @@ $session = $stmt_s->fetch(PDO::FETCH_ASSOC);
 
         echo json_encode([
             'phase'       => 'fin',
+            'round'       => $est_finale ? 'finale' : 'round',
             'score_total' => (int)$score,
             'mon_rang'    => (int)$mon_rang,
             'qualifie'    => $qualifie
@@ -480,6 +546,7 @@ $session = $stmt_s->fetch(PDO::FETCH_ASSOC);
 // =========================
 elseif ($action === 'list') {
 
+$pdo->exec("DELETE FROM participants WHERE last_activity < DATE_SUB(NOW(), INTERVAL 2 MINUTE)");
     // Récupérer la session active
     $session = $pdo->query("
         SELECT id FROM sessions 

@@ -55,7 +55,34 @@ elseif ($action === 'demarrer_round_unifie') {
     // Définir $round EN PREMIER
     $round = $data['round'] ?? 1;
     $session_id = $data['session_id'] ?? 0;
-
+// Cas spécial : départage
+if ($round === 'departage') {
+    $question_id = $data['question_id'] ?? 0;
+    $session_id = $data['session_id'] ?? 0;
+    
+    // Récupérer la question
+    $stmt = $pdo->prepare("SELECT * FROM questions WHERE id = ?");
+    $stmt->execute([$question_id]);
+    $question = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$question) {
+        echo json_encode(['success' => false, 'error' => 'Question introuvable']);
+        exit;
+    }
+    
+    // Créer un mini-round
+    $pdo->prepare("
+        INSERT INTO sessions_quiz (statut, question_actuelle, type_round, questions_ids, chrono_demarre)
+        VALUES ('en_cours', 0, 'departage', ?, 0)
+    ")->execute([json_encode([$question_id])]);
+    
+    echo json_encode([
+        'success' => true,
+        'questions' => [$question],
+        'nb_participants' => 2
+    ]);
+    exit;
+}
     // Vérifier si ce round est déjà en cours
     $type_round_check = ($round === 'finale') ? 'finale' : 'first_round_' . $round;
     $enCours = $pdo->prepare("
@@ -124,21 +151,12 @@ exit;
 ========================================================= */
 elseif ($action === 'top_chrono') {
 
-    // Chercher d'abord la finale en cours
+    // Chercher n'importe quelle session en cours (finale, round, ou départage)
     $session = $pdo->query("
         SELECT * FROM sessions_quiz 
-        WHERE statut = 'en_cours' AND type_round = 'finale'
+        WHERE statut = 'en_cours' 
         ORDER BY id DESC LIMIT 1
     ")->fetch(PDO::FETCH_ASSOC);
-
-    // Sinon prendre n'importe quelle session en cours
-    if (!$session) {
-        $session = $pdo->query("
-            SELECT * FROM sessions_quiz 
-            WHERE statut = 'en_cours' 
-            ORDER BY id DESC LIMIT 1
-        ")->fetch(PDO::FETCH_ASSOC);
-    }
 
     if ($session) {
         $pdo->prepare("
