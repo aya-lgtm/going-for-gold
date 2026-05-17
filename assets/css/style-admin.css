@@ -3,15 +3,13 @@
 ============================= */
 
 :root {
-    /* Brand Colors (Static) */
     --gold: #F5A623;
     --gold-dark: #C47D0E;
-    --gold2: #FFD700; /* gold-light */
+    --gold2: #FFD700;
     --purple: #7C3AED;
     --green: #00FF88;
     --red: #FF4B4B;
 
-    /* DARK MODE (Default state) */
     --bg: #050510;
     --bg2: #0C0C1D;
     --bg-panel: #12122A;
@@ -25,10 +23,8 @@
     --border: rgba(245, 166, 35, 0.18);
     --shadow: 0 10px 35px rgba(0, 0, 0, 0.45);
 
-    /* The Aura Fix: Rich Purple for Dark Mode */
     --body-bg-image: radial-gradient(circle at top, #1B1144 0%, transparent 30%), #050510;
 }
-  /* LIGHT MODE */
   
  body.light-mode {
     --bg-main: #F0F2FF;
