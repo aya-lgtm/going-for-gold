@@ -28,7 +28,7 @@ if (!$question) {
 $bonne_reponse = $question['bonne_reponse'];
 $correct = ($reponse == $bonne_reponse);
 
-// Calculer les points (plus vite = plus de points)
+// Calculer les points 
 $points = 0;
 if ($correct) {
     $points = max(100, round(1000 - ($temps_de_reponse * 90)));

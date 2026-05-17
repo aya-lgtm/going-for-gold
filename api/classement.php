@@ -16,10 +16,7 @@ if (!$session_id) {
     $session_id = $session['id'] ?? 0;
 }
 
-// =========================================================
-// TYPE FINALE — score UNIQUEMENT des questions de la finale
-// On lit directement les questions_ids de la session finale
-// =========================================================
+
 if ($type === 'finale') {
 
     $sq_finale = $pdo->query("
@@ -68,9 +65,8 @@ if ($type === 'finale') {
     exit;
 }
 
-// =========================================================
 // CLASSEMENT PAR GROUPE — score uniquement du round concerné
-// =========================================================
+
 if ($groupe_id) {
 
     $sq_round = $pdo->prepare("
@@ -111,11 +107,8 @@ if ($groupe_id) {
     }
 }
 
-// =========================================================
-// CLASSEMENT GLOBAL — utilise la table scores (rounds uniquement)
-// On exclut les points de la finale de scores grâce au
-// flag dans participant.php (est_question_finale)
-// =========================================================
+// CLASSEMENT GLOBAL 
+
 $stmt = $pdo->prepare("
     SELECT 
         p.id,

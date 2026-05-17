@@ -36,8 +36,7 @@ if ($action === 'status') {
         exit;
     }
 
-    $pdo->exec("DELETE FROM participants WHERE last_activity < DATE_SUB(NOW(), INTERVAL 1 MINUTE)");
-
+$pdo->exec("DELETE FROM participants WHERE last_activity < DATE_SUB(NOW(), INTERVAL 1 MINUTE) AND id NOT IN (SELECT DISTINCT participant_id FROM reponses)");
 
     $stmt_nb = $pdo->prepare("
         SELECT COUNT(*) FROM participants 
@@ -96,17 +95,19 @@ if ($action === 'status') {
         $stmt_session->execute([$type_round]);
         $session = $stmt_session->fetch(PDO::FETCH_ASSOC);
 
-        // 🔥 Si pas de round normal, chercher un round de départage
-        if (!$session) {
-            $stmt_dep = $pdo->prepare("
-                SELECT * FROM sessions_quiz
-                WHERE statut = 'en_cours'
-                AND type_round = 'departage'
-                ORDER BY id DESC LIMIT 1
-            ");
-            $stmt_dep->execute();
-            $session = $stmt_dep->fetch(PDO::FETCH_ASSOC);
-        }
+       
+// uniquement si ce participant est impliqué dans le départage
+if (!$session) {
+    $stmt_dep = $pdo->prepare("
+        SELECT * FROM sessions_quiz
+        WHERE statut = 'en_cours'
+        AND type_round = 'departage'
+        AND groupe_id = ?
+        ORDER BY id DESC LIMIT 1
+    ");
+    $stmt_dep->execute([$groupe_id]);
+    $session = $stmt_dep->fetch(PDO::FETCH_ASSOC);
+}
     }
 
     if (!$session) {
@@ -231,7 +232,7 @@ elseif ($action === 'repondre') {
         }
     }
 
-    // 8. Mettre à jour la table 'scores' (uniquement si ce n'est PAS la finale)
+    // 8. Mettre à jour la table 'scores' 
     if (!$est_question_finale) {
         try {
             $stmt_score = $pdo->prepare("
@@ -299,7 +300,6 @@ $est_finaliste = $stmt_check->fetchColumn() > 0;
 if ($est_finaliste) {
     $session = $session_finale;
 }
-// sinon $session reste null → tombera dans le bloc "round terminé"
 }
 
 if (!$session) {
@@ -312,16 +312,7 @@ $stmt_s = $pdo->prepare("
 ");
 $stmt_s->execute([$type_round]);
 $session = $stmt_s->fetch(PDO::FETCH_ASSOC);
-// Si toujours pas de session, chercher un départage
-if (!$session) {
-    $stmt_dep = $pdo->prepare("
-        SELECT * FROM sessions_quiz
-        WHERE statut = 'en_cours' AND type_round = 'departage'
-        ORDER BY id DESC LIMIT 1
-    ");
-    $stmt_dep->execute();
-    $session = $stmt_dep->fetch(PDO::FETCH_ASSOC);
-}
+
 }
 
     // Déterminer si c'est la finale
@@ -331,6 +322,66 @@ if (!$session) {
     $questions_session = $session ? json_decode($session['questions_ids'] ?? '[]', true) : [];
 
     if (!$session) {
+
+    // Vérifier un départage RÉCENT (créé après le début de la session courante)
+$stmt_dep = $pdo->prepare("
+    SELECT questions_ids, groupe_id FROM sessions_quiz 
+    WHERE type_round = 'departage'
+    AND groupe_id = ?
+    ORDER BY id DESC LIMIT 1
+");
+$stmt_dep->execute([$groupe_id]);
+$dep = $stmt_dep->fetch(PDO::FETCH_ASSOC);
+
+// Vérifier que CE participant a répondu à la question du départage
+$a_participe_departage = false;
+if ($dep) {
+    $questions_dep_check = json_decode($dep['questions_ids'], true);
+    if (!empty($questions_dep_check)) {
+        $stmt_check_dep = $pdo->prepare("
+            SELECT COUNT(*) FROM reponses 
+            WHERE participant_id = ? 
+            AND question_id = ?
+        ");
+        $stmt_check_dep->execute([$participant_id, $questions_dep_check[0]]);
+        $a_participe_departage = $stmt_check_dep->fetchColumn() > 0;
+    }
+}
+
+if ($dep && $a_participe_departage) {
+        $questions_dep = json_decode($dep['questions_ids'], true);
+        $placeholders  = implode(',', array_fill(0, count($questions_dep), '?'));
+
+        $stmt = $pdo->prepare("
+            SELECT COALESCE(SUM(points_obtenus), 0)
+            FROM reponses
+            WHERE participant_id = ?
+            AND question_id IN ($placeholders)
+        ");
+        $stmt->execute(array_merge([$participant_id], $questions_dep));
+        $score = $stmt->fetchColumn();
+
+        $stmt_rang = $pdo->prepare("
+            SELECT COUNT(*) + 1 FROM (
+                SELECT r.participant_id, SUM(r.points_obtenus) as total
+                FROM reponses r
+                WHERE r.question_id IN ($placeholders)
+                GROUP BY r.participant_id
+            ) t WHERE t.total > ?
+        ");
+        $stmt_rang->execute(array_merge($questions_dep, [$score]));
+        $mon_rang = $stmt_rang->fetchColumn();
+
+        echo json_encode([
+            'phase'       => 'fin',
+            'round'       => 'departage',
+            'score_total' => (int)$score,
+            'mon_rang'    => (int)$mon_rang,
+            'qualifie'    => ($mon_rang == 1)
+        ]);
+        exit;
+    }
+
         // Récupérer les questions du round terminé
         $type_round_fini = 'first_round_' . $groupe_id;
         $stmt_sq = $pdo->prepare("

@@ -59,7 +59,7 @@ elseif ($action === 'demarrer_round_unifie') {
 if ($round === 'departage') {
     $question_id = $data['question_id'] ?? 0;
     $session_id = $data['session_id'] ?? 0;
-    
+    $groupe_id_dep = $data['groupe_id'] ?? null;
     // Récupérer la question
     $stmt = $pdo->prepare("SELECT * FROM questions WHERE id = ?");
     $stmt->execute([$question_id]);
@@ -70,11 +70,11 @@ if ($round === 'departage') {
         exit;
     }
     
-    // Créer un mini-round
-    $pdo->prepare("
-        INSERT INTO sessions_quiz (statut, question_actuelle, type_round, questions_ids, chrono_demarre)
-        VALUES ('en_cours', 0, 'departage', ?, 0)
-    ")->execute([json_encode([$question_id])]);
+    
+$pdo->prepare("
+    INSERT INTO sessions_quiz (statut, question_actuelle, type_round, questions_ids, chrono_demarre, groupe_id)
+    VALUES ('en_cours', 0, 'departage', ?, 0, ?)
+")->execute([json_encode([$question_id]), $groupe_id_dep]);
     
     echo json_encode([
         'success' => true,
@@ -110,6 +110,9 @@ if ($round === 'departage') {
     // Fermer uniquement le même type de round
     $pdo->prepare("UPDATE sessions_quiz SET statut = 'termine' WHERE statut = 'en_cours' AND type_round = ?")
         ->execute([$type_round_check]);
+
+        // Fermer aussi tout départage en cours
+$pdo->exec("UPDATE sessions_quiz SET statut = 'termine' WHERE statut = 'en_cours' AND type_round = 'departage'");
 
     // Créer nouveau round
     $pdo->prepare("
